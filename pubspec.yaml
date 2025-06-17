@@ -1,0 +1,15 @@
+name: rwkv_downloader
+description: "File Downloader"
+version: 0.0.1
+homepage: https://github.com/rwkv-app
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  meta: ^1.17.0
+  dio: ^5.8.0+1
+  crypto: 3.0.6
+
+dev_dependencies:
+  test: ^1.22.0
