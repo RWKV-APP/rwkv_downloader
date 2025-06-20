@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
@@ -186,7 +187,7 @@ class _DownloadTask extends DownloadTask {
   String get filename => _filename ?? _path.split('/').last;
 
   Stream<TaskUpdate> events() {
-    if (_eventStreamClosed) {
+    if (_eventStreamController.isClosed) {
       _eventStreamController = StreamController();
     }
     return _eventStreamController.stream;
@@ -256,27 +257,26 @@ class _DownloadTask extends DownloadTask {
   Future cancel() async {
     final tmpPath = _tempRaf?.path;
 
-    _byteReceiveSubscription?.cancel();
-    _closeFile();
-
     _update = _update.copyWith(state: TaskState.idle, received: 0);
     _notify();
+    _eventStreamController.close();
 
     if (tmpPath != null) {
       if (File(tmpPath).existsSync()) {
         await File(tmpPath).delete();
       }
     }
-    _eventStreamController.close();
+    _byteReceiveSubscription?.cancel();
+    _closeFile();
   }
 
   @override
   Future stop() async {
     _update = _update.copyWith(state: TaskState.stopped);
     _notify();
-    _closeFile();
     _eventStreamController.close();
     _byteReceiveSubscription?.cancel();
+    _closeFile();
   }
 
   @override
@@ -342,56 +342,66 @@ class _DownloadTask extends DownloadTask {
     int chunkSize = 0;
     List<int> speedSamples = [];
     // receiving
-    _byteReceiveSubscription = data.stream.listen(
-      (List<int> chunk) async {
-        if (_update.state == TaskState.stopped) {
-          return;
-        }
-        if (_tempRaf != null && !_eventStreamClosed) {
-          _tempRaf?.writeFromSync(chunk);
-
-          /// calculate speed
-          chunkSize += chunk.length;
-          final ts = DateTime.now().millisecondsSinceEpoch;
-          final span = ts - timestamp;
-          int? speed = null;
-          if (span >= 1000) {
-            speed = (chunkSize / (span / 1000)).round();
-            speedSamples.add(speed);
-            chunkSize = 0;
-            timestamp = ts;
-            if (speedSamples.length >= 10) {
-              speed =
-                  (speedSamples.reduce((a, b) => a + b) / speedSamples.length)
-                      .toInt();
-              if (speedSamples.length > 10) {
-                speedSamples.removeAt(0);
-              }
+    _byteReceiveSubscription = data.stream
+        .timeout(
+          Duration(seconds: 2),
+          onTimeout: (sink) {
+            sink.add(Uint8List(0));
+          },
+        )
+        .listen(
+          (List<int> chunk) async {
+            if (_update.state == TaskState.stopped) {
+              return;
             }
-          }
-          _update = _update.copyWith(
-            speed: speed,
-            state: TaskState.running,
-            received: _update.received + chunk.length,
-          );
-          _notify();
-        }
-      },
-      onDone: () async {
-        await _closeFile();
-        try {
-          await _checkAndRename(tmpFile);
-        } catch (e) {
-          _error(e);
-        }
-        _complete();
-      },
-      onError: (e) async {
-        _error(e);
-        _closeFile();
-      },
-      cancelOnError: true,
-    );
+            if (_tempRaf != null && !_eventStreamClosed) {
+              if (chunk.length > 0) {
+                _tempRaf?.writeFromSync(chunk);
+              }
+
+              /// calculate speed
+              chunkSize += chunk.length;
+              final ts = DateTime.now().millisecondsSinceEpoch;
+              final span = ts - timestamp;
+              int? speed = null;
+              if (span >= 1000) {
+                speed = (chunkSize / (span / 1000)).round();
+                speedSamples.add(speed);
+                chunkSize = 0;
+                timestamp = ts;
+                if (speedSamples.length >= 10) {
+                  speed =
+                      (speedSamples.reduce((a, b) => a + b) /
+                              speedSamples.length)
+                          .toInt();
+                  if (speedSamples.length > 10) {
+                    speedSamples.removeAt(0);
+                  }
+                }
+              }
+              _update = _update.copyWith(
+                speed: speed,
+                state: TaskState.running,
+                received: _update.received + chunk.length,
+              );
+              _notify();
+            }
+          },
+          onDone: () async {
+            await _closeFile();
+            try {
+              await _checkAndRename(tmpFile);
+            } catch (e) {
+              _error(e);
+            }
+            _complete();
+          },
+          onError: (e) async {
+            _error(e);
+            _closeFile();
+          },
+          cancelOnError: true,
+        );
   }
 
   Future<int> _checkTempFile(File tmpFile, int total) async {
