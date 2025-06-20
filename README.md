@@ -9,7 +9,6 @@ void example() async {
   final task = await DownloadTask.create(
     url: 'url',
     path: 'path',
-    requestTotalSize: true,
   );
   final events = task.start();
   events.listen(

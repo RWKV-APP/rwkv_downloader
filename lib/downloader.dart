@@ -65,10 +65,16 @@ abstract class DownloadTask {
     required String url,
     required String path,
     Map<String, String> header = const {},
-    bool requestTotalSize = false,
+    bool initTotalSize = false,
+    bool initTotalSizeOnlyExist = true,
+    int? acceptedSize,
   }) async {
     final task = _DownloadTask(url: url, path: path, header: header);
-    await task._init(requestTotalSize: requestTotalSize);
+    await task._init(
+      initTotalSize: initTotalSize,
+      initTotalSizeOnlyExist: initTotalSizeOnlyExist,
+      acceptedSize: acceptedSize,
+    );
     return task;
   }
 }
@@ -103,23 +109,43 @@ class _DownloadTask extends DownloadTask {
        _path = path,
        _url = url;
 
-  Future _init({required bool requestTotalSize}) async {
-    File downloaded = File("$_path");
+  Future _init({
+    required bool initTotalSize,
+    required bool initTotalSizeOnlyExist,
+    required int? acceptedSize,
+  }) async {
+    File downloaded = File(_path);
     int _received = 0;
     int _total = 0;
     TaskState _state = TaskState.idle;
     if (downloaded.existsSync()) {
-      _state = TaskState.completed;
-      return;
+      bool verified = true;
+      if (acceptedSize != null) {
+        verified = acceptedSize == await downloaded.length();
+      }
+      if (verified) {
+        _update = _update.copyWith(state: TaskState.completed);
+        return;
+      } else {
+        await downloaded.delete();
+      }
     }
-    _total = requestTotalSize ? await getTotalSize() : 0;
 
     File tmpFile = File("$_path$tempFileSuffix");
     if (await tmpFile.exists()) {
       _received = tmpFile.lengthSync();
+      if (_received == 0) {
+        await tmpFile.delete();
+      }
     }
 
-    final stopped = _total != 0 && _received != 0;
+    final shouldInitTotalSize =
+        initTotalSize && (_received > 0 || !initTotalSizeOnlyExist);
+
+    _total = shouldInitTotalSize ? await getTotalSize() : 0;
+
+    // final stopped = _total != 0 && _received != 0;
+    final stopped = _received != 0;
     _state = stopped ? TaskState.stopped : TaskState.idle;
 
     _update = _update.copyWith(
@@ -234,6 +260,7 @@ class _DownloadTask extends DownloadTask {
         _byteReceiveSubscription?.cancel();
       },
     );
+    _update = _update.copyWith(state: TaskState.running);
     try {
       await _startInternal(deleteExist);
     } catch (e) {
@@ -290,6 +317,9 @@ class _DownloadTask extends DownloadTask {
     // receiving
     _byteReceiveSubscription = data.stream.listen(
       (List<int> chunk) async {
+        if (_update.state == TaskState.stopped) {
+          return;
+        }
         if (_tempRaf != null && !_eventStreamController.isClosed) {
           _tempRaf?.writeFromSync(chunk);
           _update = _update.copyWith(
