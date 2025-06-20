@@ -12,8 +12,14 @@ class TaskUpdate {
   final int totalSize;
   final int speed;
 
-  double get progress =>
-      totalSize < received ? -1 : (received / totalSize * 100);
+  double get remainSeconds =>
+      (speed <= 0 || !_validateState) ? -1 : ((totalSize - received) / speed);
+
+  double get speedInMB => speed / 1024 / 1024;
+
+  double get progress => !_validateState ? -1 : (received / totalSize * 100);
+
+  bool get _validateState => totalSize >= received;
 
   TaskUpdate({
     required this.speed,
@@ -91,7 +97,6 @@ abstract class DownloadTask {
 
 class _DownloadTask extends DownloadTask {
   static const tempFileSuffix = ".tmp";
-  static const speedSampleInterval = 3000;
 
   final String _url;
   final String _path;
@@ -111,7 +116,7 @@ class _DownloadTask extends DownloadTask {
     speed: 0,
   );
 
-  late StreamController<TaskUpdate> _eventStreamController;
+  StreamController<TaskUpdate>? _eventStreamController;
 
   _DownloadTask({
     required String url,
@@ -253,7 +258,7 @@ class _DownloadTask extends DownloadTask {
         await File(tmpPath).delete();
       }
     }
-    _eventStreamController.close();
+    _eventStreamController?.close();
   }
 
   @override
@@ -261,7 +266,7 @@ class _DownloadTask extends DownloadTask {
     _update = _update.copyWith(state: TaskState.stopped);
     _notify();
     await _closeFile();
-    _eventStreamController.close();
+    _eventStreamController?.close();
     return _byteReceiveSubscription?.cancel();
   }
 
@@ -277,13 +282,15 @@ class _DownloadTask extends DownloadTask {
     );
     try {
       _update = _update.copyWith(state: TaskState.running, speed: 0);
+      yield _update;
       await _startInternal(deleteExist);
+      yield _update;
     } catch (e) {
       _update = _update.copyWith(state: TaskState.idle);
       _closeFile();
       rethrow;
     }
-    yield* _eventStreamController.stream;
+    yield* _eventStreamController?.stream ?? Stream.empty();
   }
 
   @override
@@ -316,8 +323,8 @@ class _DownloadTask extends DownloadTask {
         _update = _update.copyWith(received: 0);
       }
     } catch (e, t) {
-      if (!_eventStreamController.isClosed) {
-        _eventStreamController.addError(e, t);
+      if (!_eventStreamClosed) {
+        _eventStreamController?.addError(e, t);
       }
       return;
     }
@@ -331,22 +338,34 @@ class _DownloadTask extends DownloadTask {
 
     int timestamp = DateTime.now().millisecondsSinceEpoch;
     int chunkSize = 0;
+    List<int> speedSamples = [];
     // receiving
     _byteReceiveSubscription = data.stream.listen(
       (List<int> chunk) async {
         if (_update.state == TaskState.stopped) {
           return;
         }
-        if (_tempRaf != null && !_eventStreamController.isClosed) {
+        if (_tempRaf != null && !_eventStreamClosed) {
           _tempRaf?.writeFromSync(chunk);
+
+          /// calculate speed
           chunkSize += chunk.length;
           final ts = DateTime.now().millisecondsSinceEpoch;
           final span = ts - timestamp;
           int? speed = null;
-          if (span >= speedSampleInterval) {
+          if (span >= 1000) {
             speed = (chunkSize / (span / 1000)).round();
+            speedSamples.add(speed);
             chunkSize = 0;
             timestamp = ts;
+            if (speedSamples.length >= 10) {
+              speed =
+                  (speedSamples.reduce((a, b) => a + b) / speedSamples.length)
+                      .toInt();
+              if (speedSamples.length > 10) {
+                speedSamples.removeAt(0);
+              }
+            }
           }
           _update = _update.copyWith(
             speed: speed,
@@ -411,27 +430,30 @@ class _DownloadTask extends DownloadTask {
       state: TaskState.completed,
       received: _update.totalSize,
     );
-    if (_eventStreamController.isClosed) {
+    if (_eventStreamClosed) {
       return;
     }
     _notify();
-    _eventStreamController.close();
+    _eventStreamController?.close();
   }
 
   void _error(e) async {
-    if (_eventStreamController.isClosed) {
+    if (_eventStreamClosed) {
       return;
     }
-    _eventStreamController.addError(e);
-    _eventStreamController.close();
+    _eventStreamController?.addError(e);
+    _eventStreamController?.close();
     _update = _update.copyWith(state: TaskState.stopped);
     _notify();
   }
 
   void _notify() {
-    if (_eventStreamController.isClosed) {
+    if (_eventStreamClosed) {
       return;
     }
-    _eventStreamController.add(_update);
+    _eventStreamController?.add(_update);
   }
+
+  bool get _eventStreamClosed =>
+      (_eventStreamController?.isClosed ?? true) == true;
 }
