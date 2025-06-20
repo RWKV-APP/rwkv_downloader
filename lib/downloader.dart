@@ -63,7 +63,9 @@ class TaskUpdate {
 }
 
 abstract class DownloadTask {
-  Stream<TaskUpdate> start();
+  Stream<TaskUpdate> events();
+
+  Future start();
 
   Future<void> cancel();
 
@@ -116,7 +118,7 @@ class _DownloadTask extends DownloadTask {
     speed: 0,
   );
 
-  StreamController<TaskUpdate>? _eventStreamController;
+  StreamController<TaskUpdate> _eventStreamController = StreamController();
 
   _DownloadTask({
     required String url,
@@ -183,6 +185,13 @@ class _DownloadTask extends DownloadTask {
 
   String get filename => _filename ?? _path.split('/').last;
 
+  Stream<TaskUpdate> events() {
+    if (_eventStreamClosed) {
+      _eventStreamController = StreamController();
+    }
+    return _eventStreamController.stream;
+  }
+
   Future<File> getTempFile() async {
     File tmpFile = File("$_path$tempFileSuffix");
     if (!await tmpFile.exists()) {
@@ -248,7 +257,7 @@ class _DownloadTask extends DownloadTask {
     final tmpPath = _tempRaf?.path;
 
     _byteReceiveSubscription?.cancel();
-    await _closeFile();
+    _closeFile();
 
     _update = _update.copyWith(state: TaskState.idle, received: 0);
     _notify();
@@ -258,39 +267,35 @@ class _DownloadTask extends DownloadTask {
         await File(tmpPath).delete();
       }
     }
-    _eventStreamController?.close();
+    _eventStreamController.close();
   }
 
   @override
   Future stop() async {
     _update = _update.copyWith(state: TaskState.stopped);
     _notify();
-    await _closeFile();
-    _eventStreamController?.close();
-    return _byteReceiveSubscription?.cancel();
+    _closeFile();
+    _eventStreamController.close();
+    _byteReceiveSubscription?.cancel();
   }
 
   @override
-  Stream<TaskUpdate> start({bool deleteExist = false}) async* {
+  Future start({bool deleteExist = false}) async {
     if (_update.state == TaskState.running) {
       throw Exception("task is running");
     }
-    _eventStreamController = StreamController(
-      onCancel: () {
-        _byteReceiveSubscription?.cancel();
-      },
-    );
     try {
-      _update = _update.copyWith(state: TaskState.running, speed: 0);
-      yield _update;
+      _update = _update.copyWith(
+        state: TaskState.running,
+        speed: -1,
+        totalSize: 0,
+      );
+      _notify();
       await _startInternal(deleteExist);
-      yield _update;
     } catch (e) {
-      _update = _update.copyWith(state: TaskState.idle);
-      _closeFile();
+      await stop();
       rethrow;
     }
-    yield* _eventStreamController?.stream ?? Stream.empty();
   }
 
   @override
@@ -322,11 +327,8 @@ class _DownloadTask extends DownloadTask {
         await tmpFile.create();
         _update = _update.copyWith(received: 0);
       }
-    } catch (e, t) {
-      if (!_eventStreamClosed) {
-        _eventStreamController?.addError(e, t);
-      }
-      return;
+    } catch (e) {
+      rethrow;
     }
     final rcv = await _checkTempFile(tmpFile, _update.totalSize);
     _update = _update.copyWith(received: rcv);
@@ -385,8 +387,8 @@ class _DownloadTask extends DownloadTask {
         _complete();
       },
       onError: (e) async {
-        await _closeFile();
         _error(e);
+        _closeFile();
       },
       cancelOnError: true,
     );
@@ -434,26 +436,25 @@ class _DownloadTask extends DownloadTask {
       return;
     }
     _notify();
-    _eventStreamController?.close();
+    _eventStreamController.close();
   }
 
   void _error(e) async {
     if (_eventStreamClosed) {
       return;
     }
-    _eventStreamController?.addError(e);
-    _eventStreamController?.close();
     _update = _update.copyWith(state: TaskState.stopped);
     _notify();
+    _eventStreamController.addError(e);
+    _eventStreamController.close();
   }
 
   void _notify() {
     if (_eventStreamClosed) {
       return;
     }
-    _eventStreamController?.add(_update);
+    _eventStreamController.add(_update);
   }
 
-  bool get _eventStreamClosed =>
-      (_eventStreamController?.isClosed ?? true) == true;
+  bool get _eventStreamClosed => _eventStreamController.isClosed;
 }
