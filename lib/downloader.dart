@@ -10,11 +10,13 @@ class TaskUpdate {
   final TaskState state;
   final int received;
   final int totalSize;
+  final int speed;
 
   double get progress =>
       totalSize < received ? -1 : (received / totalSize * 100);
 
   TaskUpdate({
+    required this.speed,
     required this.state,
     required this.received,
     required this.totalSize,
@@ -25,16 +27,24 @@ class TaskUpdate {
       identical(this, other) ||
       other is TaskUpdate &&
           runtimeType == other.runtimeType &&
+          speed == other.speed &&
           state == other.state &&
           received == other.received &&
           totalSize == other.totalSize;
 
   @override
-  int get hashCode => state.hashCode ^ received.hashCode ^ totalSize.hashCode;
+  int get hashCode =>
+      state.hashCode ^ received.hashCode ^ totalSize.hashCode ^ speed.hashCode;
 
-  TaskUpdate copyWith({TaskState? state, int? received, int? totalSize}) {
+  TaskUpdate copyWith({
+    TaskState? state,
+    int? received,
+    int? totalSize,
+    int? speed,
+  }) {
     return TaskUpdate(
       state: state ?? this.state,
+      speed: speed ?? this.speed,
       received: received ?? this.received,
       totalSize: totalSize ?? this.totalSize,
     );
@@ -42,7 +52,7 @@ class TaskUpdate {
 
   @override
   String toString() {
-    return 'TaskUpdate{state: $state, received: $received, totalSize: $totalSize}';
+    return 'TaskUpdate{state: $state, received: $received, totalSize: $totalSize, speed: $speed}';
   }
 }
 
@@ -81,6 +91,7 @@ abstract class DownloadTask {
 
 class _DownloadTask extends DownloadTask {
   static const tempFileSuffix = ".tmp";
+  static const speedSampleInterval = 3000;
 
   final String _url;
   final String _path;
@@ -97,6 +108,7 @@ class _DownloadTask extends DownloadTask {
     state: TaskState.idle,
     received: 0,
     totalSize: 0,
+    speed: 0,
   );
 
   late StreamController<TaskUpdate> _eventStreamController;
@@ -255,13 +267,16 @@ class _DownloadTask extends DownloadTask {
 
   @override
   Stream<TaskUpdate> start({bool deleteExist = false}) async* {
+    if (_update.state == TaskState.running) {
+      throw Exception("task is running");
+    }
     _eventStreamController = StreamController(
       onCancel: () {
         _byteReceiveSubscription?.cancel();
       },
     );
-    _update = _update.copyWith(state: TaskState.running);
     try {
+      _update = _update.copyWith(state: TaskState.running, speed: 0);
       await _startInternal(deleteExist);
     } catch (e) {
       _update = _update.copyWith(state: TaskState.idle);
@@ -314,6 +329,8 @@ class _DownloadTask extends DownloadTask {
     }
     _tempRaf = await tmpFile.open(mode: FileMode.append);
 
+    int timestamp = DateTime.now().millisecondsSinceEpoch;
+    int chunkSize = 0;
     // receiving
     _byteReceiveSubscription = data.stream.listen(
       (List<int> chunk) async {
@@ -322,7 +339,17 @@ class _DownloadTask extends DownloadTask {
         }
         if (_tempRaf != null && !_eventStreamController.isClosed) {
           _tempRaf?.writeFromSync(chunk);
+          chunkSize += chunk.length;
+          final ts = DateTime.now().millisecondsSinceEpoch;
+          final span = ts - timestamp;
+          int? speed = null;
+          if (span >= speedSampleInterval) {
+            speed = (chunkSize / (span / 1000)).round();
+            chunkSize = 0;
+            timestamp = ts;
+          }
           _update = _update.copyWith(
+            speed: speed,
             state: TaskState.running,
             received: _update.received + chunk.length,
           );
