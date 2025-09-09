@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 
 enum TaskState { idle, running, stopped, completed }
 
@@ -28,6 +29,15 @@ class TaskUpdate {
     required this.received,
     required this.totalSize,
   });
+
+  factory TaskUpdate.fromMap(Map<String, dynamic> json) {
+    return TaskUpdate(
+      state: TaskState.values[json['state'] as int],
+      received: json['received'] as int,
+      totalSize: json['totalSize'] as int,
+      speed: json['speed'] as int,
+    );
+  }
 
   @override
   bool operator ==(Object other) =>
@@ -57,9 +67,36 @@ class TaskUpdate {
     );
   }
 
+  Map<String, dynamic> toMap() => {
+    'state': state.index,
+    'received': received,
+    'totalSize': totalSize,
+    'speed': speed,
+  };
+
   @override
   String toString() {
     return 'TaskUpdate{state: $state, received: $received, totalSize: $totalSize, speed: $speed}';
+  }
+}
+
+class DownloadConfig {
+  static Dio _dio = Dio();
+
+  static void setProxy(String proxy) {
+    _dio = Dio();
+    final adapter = (_dio.httpClientAdapter as IOHttpClientAdapter);
+    adapter
+      ..createHttpClient = () {
+        final client = HttpClient();
+        client.findProxy = (uri) {
+          if (proxy.isNotEmpty) {
+            return 'PROXY $proxy;DIRECT';
+          }
+          return 'DIRECT';
+        };
+        return client;
+      };
   }
 }
 
@@ -79,6 +116,8 @@ abstract class DownloadTask {
   String get filePath;
 
   TaskState get state;
+
+  String url = '';
 
   static Future<DownloadTask> create({
     required String url,
@@ -101,7 +140,6 @@ abstract class DownloadTask {
 class _DownloadTask extends DownloadTask {
   static const tempFileSuffix = ".tmp";
 
-  final String _url;
   final String _path;
   Map<String, String> _header;
 
@@ -127,7 +165,7 @@ class _DownloadTask extends DownloadTask {
     Map<String, String> header = const {},
   }) : _header = header,
        _path = path,
-       _url = url;
+       this.url = url;
 
   Future _init({
     required bool initTotalSize,
@@ -179,6 +217,9 @@ class _DownloadTask extends DownloadTask {
     _md5 = md5;
   }
 
+  @override
+  String url = '';
+
   TaskState get state => _update.state;
 
   @override
@@ -203,8 +244,8 @@ class _DownloadTask extends DownloadTask {
 
   Future<ResponseBody> _requestFileInfo(int rangeStart) async {
     final h = {..._header, 'range': 'bytes=$rangeStart-'};
-    final response = await Dio().get(
-      _url,
+    final response = await DownloadConfig._dio.get(
+      url,
       options: Options(
         responseType: ResponseType.stream,
         followRedirects: true,
@@ -301,7 +342,7 @@ class _DownloadTask extends DownloadTask {
   @override
   String toString() {
     return '_HttpDownloadTaskImpl{'
-        '_url: $_url, '
+        'url: $url, '
         '_path: $_path, '
         '_md5: $_md5, '
         '_update: $_update}';
