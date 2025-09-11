@@ -149,6 +149,7 @@ class _DownloadTask extends DownloadTask {
   StreamSubscription? _byteReceiveSubscription;
   RandomAccessFile? _tempRaf;
   bool _supportRange = true;
+  CancelToken? _cancelToken;
 
   TaskUpdate _update = TaskUpdate(
     state: TaskState.idle,
@@ -244,8 +245,12 @@ class _DownloadTask extends DownloadTask {
 
   Future<ResponseBody> _requestFileInfo(int rangeStart) async {
     final h = {..._header, 'range': 'bytes=$rangeStart-'};
+    _cancelToken?.cancel();
+    _cancelToken = CancelToken();
+
     final response = await DownloadConfig._dio.get(
       url,
+      cancelToken: _cancelToken,
       options: Options(
         responseType: ResponseType.stream,
         followRedirects: true,
@@ -296,6 +301,8 @@ class _DownloadTask extends DownloadTask {
 
   @override
   Future cancel() async {
+    _cancelToken?.cancel();
+    _cancelToken = null;
     final tmpPath = _tempRaf?.path;
 
     _update = _update.copyWith(state: TaskState.idle, received: 0);
@@ -313,6 +320,9 @@ class _DownloadTask extends DownloadTask {
 
   @override
   Future stop() async {
+    _cancelToken?.cancel();
+    _cancelToken = null;
+
     _update = _update.copyWith(state: TaskState.stopped);
     _notify();
     _eventStreamController.close();
