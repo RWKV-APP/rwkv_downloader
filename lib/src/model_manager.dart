@@ -51,12 +51,12 @@ class ModelManager {
   Map<String, ModelInfo> _models = {};
   Map<TaskId, DownloadTask> _downloadTasks = {};
 
-  // model-file-name to file
-  Map<String, File> _localModelFiles = {};
+  // file-name to file
+  Map<String, File> _localCacheFiles = {};
 
   late final String? _remoteConfigUrl;
   late final String _configFileCachePath;
-  late final String _modelDownloadDir;
+  late final Directory _modelDownloadDir;
 
   final _downloadEvent = StreamController<DownloadEvent>.broadcast();
 
@@ -86,13 +86,13 @@ class ModelManager {
        this._remoteConfigUrl = configProviderUrl,
        this._configFileCachePath =
            configFileCachePath ?? '${modelDownloadDir}/model_config.json',
-       this._modelDownloadDir = modelDownloadDir,
+       this._modelDownloadDir = Directory(modelDownloadDir),
        this._modelFilter = filter,
        this._excludeModelFilter = exclude;
 
   Future init() async {
+    await _checkDownloadDirAvailable();
     await _updateLocalModelFiles();
-
     try {
       await updateConfig();
       return;
@@ -196,6 +196,27 @@ class ModelManager {
     return model.id;
   }
 
+  Future cleanOutdatedModelFiles({bool cleanDownloadCache = false}) async {
+    if (!await _modelDownloadDir.exists()) {
+      return;
+    }
+    final files = await _modelDownloadDir.list().toList();
+    for (final file in files) {
+      if (file is! File) {
+        continue;
+      }
+      final name = file.path.split(Platform.pathSeparator).last;
+      if (cleanDownloadCache && file.path.endsWith('.tmp')) {
+        await file.delete();
+        Logger.info(tag, 'delete download cache file: ${file.path}');
+      } else if (!file.path.endsWith('.json')) {
+        //
+      } else if (!_models.containsKey(name)) {
+        Logger.info(tag, 'delete outdated model file: ${file.path}');
+      }
+    }
+  }
+
   void _checkDownloadTask(TaskId id) {
     if (!_downloadTasks.containsKey(id)) {
       throw StateError('no such task: ${id}');
@@ -226,7 +247,7 @@ class ModelManager {
       if (_excludeModelFilter != null && _excludeModelFilter!(model)) {
         continue;
       }
-      final file = _localModelFiles[model.fileName];
+      final file = _localCacheFiles[model.fileName];
       _models[model.fileName] = model.copyWith(localPath: file?.path);
     }
     Logger.debug(
@@ -241,13 +262,12 @@ class ModelManager {
   }
 
   Future _updateLocalModelFiles() async {
-    _localModelFiles = {};
+    _localCacheFiles = {};
     try {
-      final dir = Directory(_modelDownloadDir);
-      if (!await dir.exists()) {
-        await dir.create();
+      if (!await _modelDownloadDir.exists()) {
+        await _modelDownloadDir.create();
       }
-      await for (final file in dir.list()) {
+      await for (final file in _modelDownloadDir.list()) {
         if (file is! File) continue;
 
         final fileName = file.path.split(Platform.pathSeparator).last;
@@ -256,7 +276,7 @@ class ModelManager {
         if ({'json', 'txt', 'tmp', 'log'}.contains(suffix)) {
           continue;
         }
-        _localModelFiles[fileName] = File(file.path);
+        _localCacheFiles[fileName] = File(file.path);
         final info = _models[fileName];
         if (info != null) {
           _models[fileName] = info.copyWith(localPath: file.path);
@@ -264,10 +284,35 @@ class ModelManager {
       }
       Logger.info(
         tag,
-        'update local model files success, ${_localModelFiles.length} files',
+        'update local model files success, ${_localCacheFiles.length} files',
       );
     } catch (e) {
       Logger.error(tag, 'list models failed: $e');
+    }
+  }
+
+  Future _checkDownloadDirAvailable() async {
+    final flagFile = File(
+      '${_modelDownloadDir.path}${Platform.pathSeparator}.rwkv_downloader.json',
+    );
+    if (!await flagFile.exists()) {
+      if (await _modelDownloadDir.exists()) {
+        final files = await (await _modelDownloadDir.list()).toList();
+        if (files.isNotEmpty) {
+          Logger.error(
+            tag,
+            'IMPORTANT NOTE: [modelDownloadDir] absolute path is ${_modelDownloadDir.absolute.path}',
+          );
+          Logger.error(
+            tag,
+            'IMPORTANT NOTE: [modelDownloadDir] is not an empty directory before ModelManager is used.'
+            ' Please select an empty directory to ensure file safety.',
+          );
+        }
+      } else {
+        await _modelDownloadDir.create();
+        await flagFile.create();
+      }
     }
   }
 }

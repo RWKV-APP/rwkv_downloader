@@ -4,7 +4,12 @@ import 'package:rwkv_downloader/rwkv_downloader.dart';
 import 'package:rwkv_downloader/src/logger.dart';
 
 class DownloadSource {
-  static final _allDownloadSource = [aiFastHub, hfMirror, hfMirror, googleApis];
+  static final _allDownloadSource = [
+    aiFastHub,
+    hfMirror,
+    huggingface,
+    googleApis,
+  ];
 
   static final DownloadSource aiFastHub = DownloadSource(
     'https://aifasthub.com/',
