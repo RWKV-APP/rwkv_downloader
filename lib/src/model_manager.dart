@@ -111,6 +111,7 @@ class ModelManager {
     if (_remoteConfigUrl == null || _remoteConfigUrl.isEmpty) {
       throw Exception('configUrl is not set');
     }
+    // todo version check
     final response = await _dio.get(_remoteConfigUrl);
     if (response.statusCode == 200) {
       _config = ModelConfig.fromMap(response.data);
@@ -158,7 +159,7 @@ class ModelManager {
       throw Exception('model already downloading');
     }
     File file = File(
-      [_modelDownloadDir, model.fileName].join(Platform.pathSeparator),
+      [_modelDownloadDir.path, model.fileName].join(Platform.pathSeparator),
     );
     if (await file.exists()) {
       throw Exception('file already downloaded');

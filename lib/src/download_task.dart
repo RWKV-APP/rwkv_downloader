@@ -23,7 +23,9 @@ class TaskUpdate {
 
   double get speedInMB => speed / 1024 / 1024;
 
-  double get progress => !_validateState ? -1 : (received / totalSize * 100);
+  double get progress => totalSize <= 0
+      ? double.nan
+      : (!_validateState ? -1 : (received / totalSize * 100));
 
   bool get _validateState => totalSize >= received;
 
@@ -138,7 +140,7 @@ abstract class DownloadTask {
 
   Stream<TaskUpdate> events();
 
-  Future start();
+  Future start({bool deleteExist = false});
 
   Future<void> cancel();
 
@@ -197,7 +199,7 @@ class _DownloadTask extends DownloadTask {
   static const tag = 'DownloadTask';
   static const tempFileSuffix = ".tmp";
 
-  late StreamController<int> _speedSampler;
+  StreamController<int> _speedSampler = StreamController();
 
   final String _path;
   Map<String, String> _header;
@@ -372,20 +374,17 @@ class _DownloadTask extends DownloadTask {
         .split("=")
         .last;
     final range = response.headers.value("content-range");
-    final rangeLength = int.tryParse(range?.split("/").last ?? "") ?? -1;
-    final contentLength =
-        int.tryParse(response.headers.value('content-length') ?? "") ?? -1;
+    final rangeLength = int.tryParse(range?.split("/").last ?? "");
+    final contentLength = int.tryParse(
+      response.headers.value('content-length') ?? "",
+    );
 
-    _supportRange = false;
-    if (rangeLength != -1) {
-      _supportRange = true;
-      _update = _update.copyWith(totalSize: rangeLength);
-    } else if (contentLength != -1) {
-      _update = _update.copyWith(totalSize: contentLength);
+    _supportRange = rangeLength != null || contentLength != null;
+    if (!_supportRange) {
+      Logger.info(tag, 'server does not support range download');
+      _update = _update.copyWith(totalSize: 0);
     } else {
-      throw Exception(
-        "get file length failed: $rangeLength, range: $rangeStart-$range, url: $url",
-      );
+      _update = _update.copyWith(totalSize: rangeLength ?? contentLength);
     }
     return data;
   }
@@ -482,6 +481,7 @@ class _DownloadTask extends DownloadTask {
       if (!_supportRange && _update.received > 0) {
         if (tmpExists) {
           await _tmpFile.delete();
+          await _tmpFile.create();
         }
         _update = _update.copyWith(received: 0);
       }
@@ -497,25 +497,30 @@ class _DownloadTask extends DownloadTask {
       rethrow;
     }
 
-    if (_update.received == _update.totalSize) {
-      try {
-        await _checkAndRenameTmp();
-        _complete();
-        return;
-      } catch (e) {
-        Logger.debug(tag, 'check tmp file failed:\n${e.toString()}');
+    if (_supportRange) {
+      if (_update.received == _update.totalSize) {
+        try {
+          await _checkAndRenameTmp();
+          _complete();
+          return;
+        } catch (e) {
+          Logger.debug(tag, 'check tmp file failed:\n${e.toString()}');
+          rethrow;
+          // TODO retry ?
+          // return _startInternal(deleteExist);
+        }
+      } else if (_update.received > _update.totalSize) {
+        Logger.error(
+          tag,
+          "temp file is invalid, temp: ${_update.received}, total: ${_update.totalSize}",
+        );
+        if (await _tmpFile.exists()) {
+          await _tmpFile.delete();
+        }
         return _startInternal(deleteExist);
       }
-    } else if (_update.received > _update.totalSize) {
-      Logger.error(
-        tag,
-        "temp file is invalid, temp: ${_update.received}, total: ${_update.totalSize}",
-      );
-      if (await _tmpFile.exists()) {
-        await _tmpFile.delete();
-      }
-      return _startInternal(deleteExist);
     }
+
     final data = await _requestFileInfo(_update.received);
     _startSpeedSampler();
     if (!tmpExists) {
@@ -530,6 +535,7 @@ class _DownloadTask extends DownloadTask {
             _retryCount = 0;
           },
           onDone: () async {
+            Logger.info(tag, 'download completed');
             _speedSampler.close();
             await _closeRafFile();
             try {
@@ -550,7 +556,10 @@ class _DownloadTask extends DownloadTask {
           },
           cancelOnError: true,
         );
-    Logger.info(tag, 'start download ${_update.received}/${_update.totalSize}');
+    Logger.info(
+      tag,
+      'start download ${_update.received}/${_update.totalSize}, $url',
+    );
   }
 
   void _retry() {

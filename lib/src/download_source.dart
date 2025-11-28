@@ -44,8 +44,10 @@ class DownloadSource {
   Future<int> test(String path, String filePath) async {
     final task = await createDownloadTask(path, filePath);
     task.maxRetry = 0;
+    task.md5 = null;
+    task.sha256 = null;
     try {
-      await task.start().timeout(speedTestRequestTimeout);
+      await task.start(deleteExist: true).timeout(speedTestRequestTimeout);
       () async {
         await Future.delayed(speedTestDuration);
         await task.stop();
@@ -150,6 +152,9 @@ class _AutoDownloadSource extends DownloadSource {
     final target = File(path);
     if (await target.exists()) {
       await file.delete();
+      return;
+    }
+    if (!await file.exists()){
       return;
     }
     await file.rename(target.path);
