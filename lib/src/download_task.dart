@@ -45,6 +45,16 @@ class TaskUpdate {
     required this.timestamp,
   });
 
+  factory TaskUpdate.initial() {
+    return TaskUpdate(
+      speed: 0,
+      state: TaskState.idle,
+      received: 0,
+      totalSize: 0,
+      timestamp: 0,
+    );
+  }
+
   factory TaskUpdate.fromMap(Map<String, dynamic> json) {
     return TaskUpdate(
       state: TaskState.values[json['state'] as int],
@@ -136,6 +146,11 @@ abstract class DownloadTask {
       throw Exception('file hash check failed, expect: $expect, actual: $sum');
     }
     return true;
+  }
+
+  static bool isCanceledManual(dynamic e) {
+    final manualCancel = e is DioException && e.type == DioExceptionType.cancel;
+    return manualCancel;
   }
 
   Stream<TaskUpdate> events();
@@ -374,17 +389,18 @@ class _DownloadTask extends DownloadTask {
         .split("=")
         .last;
     final range = response.headers.value("content-range");
-    final rangeLength = int.tryParse(range?.split("/").last ?? "");
-    final contentLength = int.tryParse(
-      response.headers.value('content-length') ?? "",
-    );
+    final rangeLength = int.tryParse(range?.split("/").last ?? "") ?? -1;
+    final contentLength =
+        int.tryParse(response.headers.value('content-length') ?? "") ?? -1;
 
-    _supportRange = rangeLength != null || contentLength != null;
-    if (!_supportRange) {
-      Logger.info(tag, 'server does not support range download');
-      _update = _update.copyWith(totalSize: 0);
+    _supportRange = false;
+    if (rangeLength != -1) {
+      _supportRange = true;
+      _update = _update.copyWith(totalSize: rangeLength);
+    } else if (contentLength != -1) {
+      _update = _update.copyWith(totalSize: contentLength);
     } else {
-      _update = _update.copyWith(totalSize: rangeLength ?? contentLength);
+      _update = _update.copyWith(totalSize: -1);
     }
     return data;
   }
@@ -466,6 +482,7 @@ class _DownloadTask extends DownloadTask {
   Future _startInternal(bool deleteExist) async {
     if (await File(_path).exists()) {
       if (deleteExist) {
+        Logger.info(tag, 'delete exist file: $_path');
         await File(_path).delete();
       } else {
         throw Exception("file already exists");
@@ -483,7 +500,6 @@ class _DownloadTask extends DownloadTask {
           await _tmpFile.delete();
           await _tmpFile.create();
         }
-        _update = _update.copyWith(received: 0);
       }
     } on DioException catch (e) {
       // HTTP 416 - Range Not Satisfiable
@@ -521,12 +537,12 @@ class _DownloadTask extends DownloadTask {
       }
     }
 
-    final data = await _requestFileInfo(_update.received);
     _startSpeedSampler();
-    if (!tmpExists) {
-      await _tmpFile.create();
+    if (!await _tmpFile.exists()) {
+      await _tmpFile.create(recursive: true);
     }
     _tempRaf = await _tmpFile.open(mode: FileMode.writeOnlyAppend);
+    final data = await _requestFileInfo(_update.received);
     _byteReceiveSubscription = data.stream
         .timeout(Duration(seconds: 1))
         .listen(
