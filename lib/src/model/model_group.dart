@@ -25,13 +25,26 @@ class ModelGroup {
     };
   }
 
+  Map<String, dynamic> toMapNonZero() {
+    final map = toMap();
+    map.removeWhere(
+      (key, value) =>
+          value == null ||
+          value == '' ||
+          value == 0 ||
+          value == false ||
+          (value is Iterable && value.isEmpty),
+    );
+    return map;
+  }
+
   factory ModelGroup.fromMap(Map<String, dynamic> map) {
     return ModelGroup(
       name: map['name'] as String,
       desc: map['desc'] ?? '',
-      backends: ModelBackend.fromJson(map['backends']),
-      platforms: ModelPlatform.fromJson(map['platforms']),
-      tags: List<int>.from(map['tags']),
+      backends: ModelBackend.fromJson(map['backends'] ?? []),
+      platforms: ModelPlatform.fromJson(map['platforms'] ?? []),
+      tags: List<int>.from(map['tags'] ?? []),
     );
   }
 }

@@ -9,6 +9,19 @@ class ModelTag {
     return {'name': name, 'desc': desc, 'color': color};
   }
 
+  Map<String, dynamic> toMapNonZero() {
+    final map = toMap();
+    map.removeWhere(
+      (key, value) =>
+          value == null ||
+          value == '' ||
+          value == 0 ||
+          value == false ||
+          (value is Iterable && value.isEmpty),
+    );
+    return map;
+  }
+
   factory ModelTag.fromMap(dynamic map) {
     return ModelTag(
       name: map['name'] as String,

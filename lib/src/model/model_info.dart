@@ -58,6 +58,19 @@ class ModelInfo {
     };
   }
 
+  Map<String, dynamic> toMapNonZero() {
+    final map = toMap();
+    map.removeWhere(
+      (key, value) =>
+          value == null ||
+          value == '' ||
+          value == 0 ||
+          value == false ||
+          (value is Iterable && value.isEmpty),
+    );
+    return map;
+  }
+
   factory ModelInfo.fromMap(dynamic map) {
     return ModelInfo(
       id: map['id'] as String,

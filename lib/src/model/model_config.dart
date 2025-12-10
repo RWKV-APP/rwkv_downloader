@@ -31,9 +31,9 @@ class ModelConfig {
     return {
       'version': this.version,
       'timestamp': this.timestamp,
-      'tags': this.tags.map((e) => e.toMap()).toList(),
-      'groups': this.groups.map((e) => e.toMap()).toList(),
-      'models': this.models.map((e) => e.toMap()).toList(),
+      'tags': this.tags.map((e) => e.toMapNonZero()).toList(),
+      'groups': this.groups.map((e) => e.toMapNonZero()).toList(),
+      'models': this.models.map((e) => e.toMapNonZero()).toList(),
     };
   }
 
