@@ -27,7 +27,7 @@ void main() {
   test('test_download', () async {
     await instance.init();
     final model = instance.models[3];
-    final taskId = await instance.download(model);
+    final taskId = await instance.download(model.id);
 
     () async {
       await Future.delayed(Duration(seconds: 4));

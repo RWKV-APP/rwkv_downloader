@@ -5,12 +5,11 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:rwkv_downloader/rwkv_downloader.dart';
 import 'package:rwkv_downloader/src/logger.dart';
-import 'package:rwkv_downloader/src/model/model.dart';
 import 'package:rxdart/rxdart.dart';
 
 typedef ModelFilter = bool Function(ModelInfo config);
 
-typedef TaskId = String;
+typedef ModelId = String;
 
 bool _defaultModelFilter(ModelInfo config) {
   if (config.isDebug) {
@@ -43,13 +42,19 @@ class ModelManager {
   static const String tag = 'ModelManager';
   static const ModelFilter defaultModelFilter = _defaultModelFilter;
 
-  late final _dio = Dio();
+  late final _dio = Dio(
+    BaseOptions(
+      connectTimeout: Duration(seconds: 3),
+      receiveTimeout: Duration(seconds: 3),
+    ),
+  );
 
   ModelConfig _config = ModelConfig.empty();
 
   // model-file-name to model info
-  Map<String, ModelInfo> _models = {};
-  Map<TaskId, DownloadTask> _downloadTasks = {};
+  Map<String, ModelInfo> _filename2models = {};
+  Map<String, ModelInfo> _id2model = {};
+  Map<ModelId, DownloadTask> _downloadTasks = {};
 
   // file-name to file
   Map<String, File> _localCacheFiles = {};
@@ -71,7 +76,7 @@ class ModelManager {
   List<ModelInfo> get allModels => _config.models;
 
   /// Return available models
-  List<ModelInfo> get models => _models.values.toList();
+  List<ModelInfo> get models => _filename2models.values.toList();
 
   ModelManager({
     required DownloadSource downloadSource,
@@ -81,29 +86,32 @@ class ModelManager {
     FileVerifier downloadFileVerifier = DownloadTask.defaultFileVerifier,
     ModelFilter? filter = defaultModelFilter,
     ModelFilter? exclude,
-  }) : this._downloadFileVerifier = downloadFileVerifier,
-       this.downloadSource = downloadSource,
-       this._remoteConfigUrl = configProviderUrl,
-       this._configFileCachePath =
-           configFileCachePath ?? '${modelDownloadDir}/model_config.json',
-       this._modelDownloadDir = Directory(modelDownloadDir),
-       this._modelFilter = filter,
-       this._excludeModelFilter = exclude;
+  })
+      : this._downloadFileVerifier = downloadFileVerifier,
+        this.downloadSource = downloadSource,
+        this._remoteConfigUrl = configProviderUrl,
+        this._configFileCachePath =
+            configFileCachePath ?? '${modelDownloadDir}/model_config.json',
+        this._modelDownloadDir = Directory(modelDownloadDir),
+        this._modelFilter = filter,
+        this._excludeModelFilter = exclude;
 
-  Future init() async {
+  Future<Map<ModelId, DownloadTask>> init() async {
     await _checkDownloadDirAvailable();
     await _updateLocalModelFiles();
     try {
       await updateConfig();
-      return;
     } catch (e) {
       Logger.debug(tag, 'pull remote config failed: $e');
+      try {
+        await _restoreCache();
+      } catch (e) {
+        Logger.debug(tag, 'restore cache failed: $e');
+      }
     }
-    try {
-      await _restoreCache();
-    } catch (e) {
-      Logger.debug(tag, 'restore cache failed: $e');
-    }
+    await _restoreDownloadTasks();
+    Logger.info(tag, 'initialized!');
+    return {..._downloadTasks};
   }
 
   /// Try to pull config-file from remote, update local cache, and model list.
@@ -128,7 +136,7 @@ class ModelManager {
   }
 
   /// Event stream for download tasks.
-  Stream<DownloadEvent> downloadUpdateEvents({TaskId? id}) {
+  Stream<DownloadEvent> downloadUpdateEvents({ModelId? id}) {
     var stream = _downloadEvent.stream;
     if (id == null) {
       return stream;
@@ -138,23 +146,23 @@ class ModelManager {
     return stream.takeWhileInclusive((e) => e.update.isRunning);
   }
 
-  Future cancelTask(TaskId id) async {
+  Future cancelTask(ModelId id) async {
     _checkDownloadTask(id);
     final task = _downloadTasks[id]!;
     await task.cancel();
     _downloadTasks.remove(id);
   }
 
-  Future pauseTask(TaskId id) async {
+  Future pauseTask(ModelId id) async {
     _checkDownloadTask(id);
     final task = _downloadTasks[id]!;
     assert(task.state == TaskState.running);
     await task.stop();
   }
 
-  Future<TaskId> download(ModelInfo model) async {
-    final taskId = model.url;
-    final exists = _downloadTasks[taskId];
+  Future download(ModelId id) async {
+    final model = models.firstWhere((element) => element.id == id);
+    final exists = _downloadTasks[id];
     if (exists != null && exists.state == TaskState.running) {
       throw Exception('model already downloading');
     }
@@ -170,10 +178,10 @@ class ModelManager {
     task.sha256 = model.sha256;
     task.verifier = _downloadFileVerifier;
 
-    _downloadTasks[taskId] = task;
+    _downloadTasks[id] = task;
 
     final sp = task.events().listen(
-      (event) {
+          (event) {
         _downloadEvent.add(DownloadEvent(model: model, update: event));
       },
       onDone: () {
@@ -191,10 +199,25 @@ class ModelManager {
     } catch (_) {
       sp.cancel();
       task.cancel();
-      _downloadTasks.remove(taskId);
+      _downloadTasks.remove(id);
       rethrow;
     }
     return model.id;
+  }
+
+  Future deleteLocalModelFiles(ModelId id) async {
+    final model = models.firstWhere((element) => element.id == id);
+    final path = [
+      _modelDownloadDir.path,
+      model.fileName,
+    ].join(Platform.pathSeparator);
+    final file = File(path);
+    if (await file.exists()) {
+      await file.delete();
+      _filename2models[model.fileName] = model.copyWith(localPath: '');
+    } else {
+      throw Exception('file not exists: $path');
+    }
   }
 
   Future cleanOutdatedModelFiles({bool cleanDownloadCache = false}) async {
@@ -206,26 +229,28 @@ class ModelManager {
       if (file is! File) {
         continue;
       }
-      final name = file.path.split(Platform.pathSeparator).last;
+      final name = file.path
+          .split(Platform.pathSeparator)
+          .last;
       if (cleanDownloadCache && file.path.endsWith('.tmp')) {
         await file.delete();
         Logger.info(tag, 'delete download cache file: ${file.path}');
       } else if (!file.path.endsWith('.json')) {
         //
-      } else if (!_models.containsKey(name)) {
+      } else if (!_filename2models.containsKey(name)) {
         Logger.info(tag, 'delete outdated model file: ${file.path}');
       }
     }
   }
 
-  void _checkDownloadTask(TaskId id) {
+  void _checkDownloadTask(ModelId id) {
     if (!_downloadTasks.containsKey(id)) {
       throw StateError('no such task: ${id}');
     }
   }
 
   Future _restoreCache() async {
-    final file = await File(_configFileCachePath);
+    final file = File(_configFileCachePath);
     if (!await file.exists()) {
       return;
     }
@@ -240,7 +265,7 @@ class ModelManager {
   }
 
   void _resolveConfig() {
-    _models = {};
+    _filename2models = {};
     for (final model in _config.models) {
       if (_modelFilter != null && !_modelFilter!(model)) {
         continue;
@@ -249,16 +274,23 @@ class ModelManager {
         continue;
       }
       final file = _localCacheFiles[model.fileName];
-      _models[model.fileName] = model.copyWith(localPath: file?.path);
+      _filename2models[model.fileName] = model.copyWith(localPath: file?.path);
+      _id2model[model.id] = model;
+    }
+    for (final id in _downloadTasks.keys) {
+      if (!_id2model.containsKey(id)) {
+        _downloadTasks.remove(id)?.cancel();
+      }
     }
     Logger.debug(
       tag,
       'config resolved: '
-      'version: ${_config.version}, '
-      'timestamp: ${_config.timestamp}, '
-      '${_models.length}/${_config.models.length} available models, '
-      '${_config.tags.length} tags, '
-      '${_config.groups.length} groups',
+          'version: ${_config.version}, '
+          'timestamp: ${_config.timestamp}, '
+          '${_filename2models.length}/${_config.models
+          .length} available models, '
+          '${_config.tags.length} tags, '
+          '${_config.groups.length} groups',
     );
   }
 
@@ -271,16 +303,20 @@ class ModelManager {
       await for (final file in _modelDownloadDir.list()) {
         if (file is! File) continue;
 
-        final fileName = file.path.split(Platform.pathSeparator).last;
-        final suffix = fileName.split('.').last;
+        final fileName = file.path
+            .split(Platform.pathSeparator)
+            .last;
+        final suffix = fileName
+            .split('.')
+            .last;
 
         if ({'json', 'txt', 'tmp', 'log'}.contains(suffix)) {
           continue;
         }
         _localCacheFiles[fileName] = File(file.path);
-        final info = _models[fileName];
+        final info = _filename2models[fileName];
         if (info != null) {
-          _models[fileName] = info.copyWith(localPath: file.path);
+          _filename2models[fileName] = info.copyWith(localPath: file.path);
         }
       }
       Logger.info(
@@ -289,6 +325,46 @@ class ModelManager {
       );
     } catch (e) {
       Logger.error(tag, 'list models failed: $e');
+    }
+  }
+
+  Future _restoreDownloadTasks() async {
+    try {
+      if (!await _modelDownloadDir.exists()) {
+        return;
+      }
+      _downloadTasks = {};
+      await for (final file in _modelDownloadDir.list()) {
+        if (file is! File) continue;
+
+        final fileName = file.path
+            .split(Platform.pathSeparator)
+            .last;
+
+        if (!fileName.endsWith('.tmp')) {
+          continue;
+        }
+        final realName = fileName.substring(0, fileName.length - 4);
+        final model = _filename2models[realName];
+        if (model != null) {
+          try {
+            _downloadTasks[model.id] = await downloadSource.createDownloadTask(
+              model.url,
+              file.path.substring(0, file.path.length - 4),
+            );
+            try {
+              await _restoreCache();
+            } catch (e) {
+              Logger.debug(tag, 'restore cache failed: $e');
+            }
+          } catch (e) {
+            Logger.error(tag, 'restore download task failed: $e');
+          }
+        }
+      }
+      Logger.info(tag, '${_downloadTasks.length} download tasks restored');
+    } catch (e) {
+      Logger.error(tag, 'restore download tasks failed: $e');
     }
   }
 
@@ -302,12 +378,13 @@ class ModelManager {
         if (files.isNotEmpty) {
           Logger.error(
             tag,
-            'IMPORTANT NOTE: [modelDownloadDir] absolute path is ${_modelDownloadDir.absolute.path}',
+            'IMPORTANT NOTE: [modelDownloadDir] absolute path is ${_modelDownloadDir
+                .absolute.path}',
           );
           Logger.error(
             tag,
             'IMPORTANT NOTE: [modelDownloadDir] is not an empty directory before ModelManager is used.'
-            ' Please select an empty directory to ensure file safety.',
+                ' Please select an empty directory to ensure file safety.',
           );
         }
       } else {

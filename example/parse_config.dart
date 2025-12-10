@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:rwkv_downloader/src/model/model.dart';
 
 void main() async {
@@ -14,12 +15,14 @@ void main() async {
   final tags = <String, ModelTag>{};
   final models = <ModelInfo>[];
 
+  final digest = crypto.md5;
+
   for (final g in json.entries) {
     groups.add(
       ModelGroup(name: g.key, desc: '', backends: [], platforms: [], tags: []),
     );
     for (final m in g.value['model_config']) {
-      m['id'] = m['url'];
+      m['id'] = digest.convert(utf8.encode(m['url'])).toString();
       m['groups'] = [g.key];
       m['backend'] = m['backends']?.first;
       ModelInfo model = ModelInfo.fromMap(m);

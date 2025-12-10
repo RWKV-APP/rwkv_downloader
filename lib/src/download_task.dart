@@ -29,6 +29,8 @@ class TaskUpdate {
 
   bool get _validateState => totalSize >= received;
 
+  bool get requesting => progress.isNaN || progress < 0;
+
   bool get isStopped => state == TaskState.stopped;
 
   bool get isCompleted => state == TaskState.completed;
@@ -171,7 +173,7 @@ abstract class DownloadTask {
 
   TaskUpdate get update;
 
-  String get url;
+  abstract String url;
 
   String? md5;
 
@@ -204,6 +206,7 @@ abstract class DownloadTask {
       initTotalSize: initTotalSize,
       initTotalSizeOnlyExist: initTotalSizeOnlyExist,
     );
+    Logger.debug('DownloadTask', 'task init: ${task._path}, ${task._update.toString()}');
     return task;
   }
 }

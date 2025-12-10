@@ -31,6 +31,8 @@ class DownloadSource {
   final String url;
   int speed = -1;
 
+  String get name => Uri.parse(url).host;
+
   DownloadSource([this.url = '']);
 
   Future<DownloadTask> createDownloadTask(String path, String filePath) async {
@@ -76,13 +78,11 @@ class _AutoDownloadSource extends DownloadSource {
   @override
   Future<DownloadTask> createDownloadTask(String path, String filePath) async {
     final isUrl = path.startsWith('http://') || path.startsWith('https://');
-    if (_source == null && !isUrl) {
-      await test(path, filePath);
-
-      /// avoid baned by server by too frequent requests
-      await Future.delayed(Duration(seconds: 1));
+    if (isUrl) {
+      return DownloadTask.create(url: path, path: filePath);
     }
-    return super.createDownloadTask(path, filePath);
+    final task = await DownloadTask.create(url: path, path: filePath);
+    return _AutoSourceTask(source: this, task: task, resourcePath: path);
   }
 
   @override
@@ -154,9 +154,64 @@ class _AutoDownloadSource extends DownloadSource {
       await file.delete();
       return;
     }
-    if (!await file.exists()){
+    if (!await file.exists()) {
       return;
     }
     await file.rename(target.path);
   }
+}
+
+class _AutoSourceTask extends DownloadTask {
+  final _AutoDownloadSource source;
+  final DownloadTask task;
+  final String resourcePath;
+
+  _AutoSourceTask({
+    required this.source,
+    required this.task,
+    required this.resourcePath,
+  });
+
+  @override
+  Future start({bool deleteExist = false}) async {
+    if (source._source == null) {
+      await source.test(resourcePath, filePath);
+
+      /// avoid baned by server by too frequent requests
+      await Future.delayed(Duration(seconds: 1));
+    }
+    final Uri uri = Uri.parse(source.url).replace(path: resourcePath);
+    task.url = uri.toString();
+    return task.start(deleteExist: deleteExist);
+  }
+
+  @override
+  Future<void> cancel() => task.cancel();
+
+  @override
+  Stream<TaskUpdate> events() => task.events();
+
+  @override
+  String get filePath => task.filePath;
+
+  @override
+  int getReceivedSize() => task.getReceivedSize();
+
+  @override
+  Future<int> getTotalSize() => task.getTotalSize();
+
+  @override
+  TaskState get state => task.state;
+
+  @override
+  Future<void> stop() => task.stop();
+
+  @override
+  TaskUpdate get update => task.update;
+
+  @override
+  String get url => task.url;
+
+  @override
+  set url(String value) => task.url = value;
 }
