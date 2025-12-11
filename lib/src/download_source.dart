@@ -31,7 +31,7 @@ class DownloadSource {
   final String url;
   int speed = -1;
 
-  String get name => Uri.parse(url).host;
+  String get name => this == auto ? 'auto' : Uri.parse(url).host;
 
   DownloadSource([this.url = '']);
 

@@ -15,6 +15,8 @@ class ModelInfo {
   final List<String> groups;
   final List<String> socLimitations;
   final bool isDebug;
+  final int updatedAt;
+  final String description;
 
   final String localPath;
 
@@ -36,6 +38,8 @@ class ModelInfo {
     required this.groups,
     required this.socLimitations,
     required this.isDebug,
+    required this.updatedAt,
+    required this.description,
     this.localPath = '',
   });
 
@@ -55,6 +59,8 @@ class ModelInfo {
       'groups': groups,
       'socLimitations': socLimitations,
       'isDebug': isDebug,
+      'updatedAt': updatedAt,
+      'description': description,
     };
   }
 
@@ -87,6 +93,8 @@ class ModelInfo {
       isDebug: map['isDebug'] ?? false,
       sha256: map['sha256'] ?? '',
       md5: map['md5'] ?? '',
+      updatedAt: map['updatedAt'] ?? 0,
+      description: map['description'] ?? '',
     );
   }
 
@@ -106,6 +114,8 @@ class ModelInfo {
     List<String>? socLimitations,
     bool? isDebug,
     String? localPath,
+    int? updatedAt,
+    String? description,
   }) {
     return ModelInfo(
       id: id ?? this.id,
@@ -123,6 +133,8 @@ class ModelInfo {
       socLimitations: socLimitations ?? this.socLimitations,
       isDebug: isDebug ?? this.isDebug,
       localPath: localPath ?? this.localPath,
+      updatedAt: updatedAt ?? this.updatedAt,
+      description: description ?? this.description,
     );
   }
 }

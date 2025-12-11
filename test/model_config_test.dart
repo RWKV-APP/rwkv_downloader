@@ -27,6 +27,8 @@ void main() {
           groups: ['group1'],
           socLimitations: ['socLimitations'],
           isDebug: false,
+          description: '',
+          updatedAt: 0,
         ),
       ],
       tags: [ModelTag(name: 'tag1', desc: 'desc', color: 'color')],

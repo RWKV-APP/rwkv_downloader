@@ -343,11 +343,6 @@ class ModelManager {
               model.url,
               file.path.substring(0, file.path.length - 4),
             );
-            try {
-              await _restoreCache();
-            } catch (e) {
-              Logger.debug(tag, 'restore cache failed: $e');
-            }
           } catch (e) {
             Logger.error(tag, 'restore download task failed: $e');
           }
