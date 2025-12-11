@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:rwkv_downloader/rwkv_downloader.dart';
+import 'package:rwkv_downloader/src/exception.dart';
 import 'package:rwkv_downloader/src/logger.dart';
 import 'package:rxdart/rxdart.dart';
 
@@ -86,15 +87,14 @@ class ModelManager {
     FileVerifier downloadFileVerifier = DownloadTask.defaultFileVerifier,
     ModelFilter? filter = defaultModelFilter,
     ModelFilter? exclude,
-  })
-      : this._downloadFileVerifier = downloadFileVerifier,
-        this.downloadSource = downloadSource,
-        this._remoteConfigUrl = configProviderUrl,
-        this._configFileCachePath =
-            configFileCachePath ?? '${modelDownloadDir}/model_config.json',
-        this._modelDownloadDir = Directory(modelDownloadDir),
-        this._modelFilter = filter,
-        this._excludeModelFilter = exclude;
+  }) : this._downloadFileVerifier = downloadFileVerifier,
+       this.downloadSource = downloadSource,
+       this._remoteConfigUrl = configProviderUrl,
+       this._configFileCachePath =
+           configFileCachePath ?? '${modelDownloadDir}/model_config.json',
+       this._modelDownloadDir = Directory(modelDownloadDir),
+       this._modelFilter = filter,
+       this._excludeModelFilter = exclude;
 
   Future<Map<ModelId, DownloadTask>> init() async {
     await _checkDownloadDirAvailable();
@@ -164,13 +164,13 @@ class ModelManager {
     final model = models.firstWhere((element) => element.id == id);
     final exists = _downloadTasks[id];
     if (exists != null && exists.state == TaskState.running) {
-      throw Exception('model already downloading');
+      throw DownloadException(message: 'model already downloading');
     }
     File file = File(
       [_modelDownloadDir.path, model.fileName].join(Platform.pathSeparator),
     );
     if (await file.exists()) {
-      throw Exception('file already downloaded');
+      throw DownloadException(message: 'file already downloaded');
     }
     final task = await downloadSource.createDownloadTask(model.url, file.path);
 
@@ -181,7 +181,7 @@ class ModelManager {
     _downloadTasks[id] = task;
 
     final sp = task.events().listen(
-          (event) {
+      (event) {
         _downloadEvent.add(DownloadEvent(model: model, update: event));
       },
       onDone: () {
@@ -229,9 +229,7 @@ class ModelManager {
       if (file is! File) {
         continue;
       }
-      final name = file.path
-          .split(Platform.pathSeparator)
-          .last;
+      final name = file.path.split(Platform.pathSeparator).last;
       if (cleanDownloadCache && file.path.endsWith('.tmp')) {
         await file.delete();
         Logger.info(tag, 'delete download cache file: ${file.path}');
@@ -285,12 +283,11 @@ class ModelManager {
     Logger.debug(
       tag,
       'config resolved: '
-          'version: ${_config.version}, '
-          'timestamp: ${_config.timestamp}, '
-          '${_filename2models.length}/${_config.models
-          .length} available models, '
-          '${_config.tags.length} tags, '
-          '${_config.groups.length} groups',
+      'version: ${_config.version}, '
+      'timestamp: ${_config.timestamp}, '
+      '${_filename2models.length}/${_config.models.length} available models, '
+      '${_config.tags.length} tags, '
+      '${_config.groups.length} groups',
     );
   }
 
@@ -303,12 +300,8 @@ class ModelManager {
       await for (final file in _modelDownloadDir.list()) {
         if (file is! File) continue;
 
-        final fileName = file.path
-            .split(Platform.pathSeparator)
-            .last;
-        final suffix = fileName
-            .split('.')
-            .last;
+        final fileName = file.path.split(Platform.pathSeparator).last;
+        final suffix = fileName.split('.').last;
 
         if ({'json', 'txt', 'tmp', 'log'}.contains(suffix)) {
           continue;
@@ -337,9 +330,7 @@ class ModelManager {
       await for (final file in _modelDownloadDir.list()) {
         if (file is! File) continue;
 
-        final fileName = file.path
-            .split(Platform.pathSeparator)
-            .last;
+        final fileName = file.path.split(Platform.pathSeparator).last;
 
         if (!fileName.endsWith('.tmp')) {
           continue;
@@ -378,13 +369,12 @@ class ModelManager {
         if (files.isNotEmpty) {
           Logger.error(
             tag,
-            'IMPORTANT NOTE: [modelDownloadDir] absolute path is ${_modelDownloadDir
-                .absolute.path}',
+            'IMPORTANT NOTE: [modelDownloadDir] absolute path is ${_modelDownloadDir.absolute.path}',
           );
           Logger.error(
             tag,
             'IMPORTANT NOTE: [modelDownloadDir] is not an empty directory before ModelManager is used.'
-                ' Please select an empty directory to ensure file safety.',
+            ' Please select an empty directory to ensure file safety.',
           );
         }
       } else {

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
+import 'package:rwkv_downloader/src/exception.dart';
 import 'package:rwkv_downloader/src/utils.dart';
 import 'package:rxdart/rxdart.dart';
 
@@ -206,7 +207,10 @@ abstract class DownloadTask {
       initTotalSize: initTotalSize,
       initTotalSizeOnlyExist: initTotalSizeOnlyExist,
     );
-    Logger.debug('DownloadTask', 'task init: ${task._path}, ${task._update.toString()}');
+    Logger.debug(
+      'DownloadTask',
+      'task init: ${task._path}, ${task._update.toString()}',
+    );
     return task;
   }
 }
@@ -274,6 +278,7 @@ class _DownloadTask extends DownloadTask {
        _sha256 = sha256;
 
   void _startSpeedSampler() {
+    _speedSampler.close();
     _speedSampler = StreamController();
 
     /// smooth speed sample, 10 seconds window, sample every second
@@ -289,10 +294,6 @@ class _DownloadTask extends DownloadTask {
         .listen((e) {
           final speed = e.fold(0, (p, e) => p + e) / e.length;
           _update = _update.copyWith(speed: speed.toInt());
-          Logger.info(
-            tag,
-            'downloading: ${_update.progress.toStringAsFixed(2)}%, ${_update.speedInMB.toStringAsFixed(2)}MB/s',
-          );
           _notify();
         });
   }
@@ -452,10 +453,10 @@ class _DownloadTask extends DownloadTask {
   @override
   Future start({bool deleteExist = false}) async {
     if (_update.state == TaskState.running) {
-      throw Exception("task already started");
+      throw DownloadException(message: "task already started");
     }
     if (_update.state == TaskState.completed && !deleteExist) {
-      throw StateError('file already downloaded');
+      throw DownloadException(message: 'file already downloaded');
     }
     try {
       _update = _update.copyWith(
@@ -467,7 +468,7 @@ class _DownloadTask extends DownloadTask {
       await _startInternal(deleteExist);
     } catch (e) {
       await stop();
-      rethrow;
+      throw DownloadException.wrap(e);
     }
   }
 
@@ -565,11 +566,12 @@ class _DownloadTask extends DownloadTask {
             _complete();
           },
           onError: (e) async {
-            if (e is TimeoutException && _retryCount < maxRetry) {
-              _retry();
+            final ep = DownloadException.wrap(e);
+            if (ep.retry) {
+              _retry(ep);
             } else {
               _speedSampler.close();
-              _error(e);
+              _error(ep);
               _closeRafFile();
             }
           },
@@ -581,10 +583,18 @@ class _DownloadTask extends DownloadTask {
     );
   }
 
-  void _retry() {
+  void _retry(dynamic e) async {
     _retryCount++;
-    Logger.error(tag, 'retry $_retryCount/$maxRetry');
-    _startInternal(false);
+    if (_retryCount > maxRetry) {
+      _error(e);
+      return;
+    }
+    Logger.error(tag, 'retry $_retryCount/$maxRetry, due to: $e');
+    try {
+      await _startInternal(false);
+    } catch (e) {
+      _error(e);
+    }
   }
 
   void _receiveChunk(List<int> chunk) {
@@ -599,7 +609,9 @@ class _DownloadTask extends DownloadTask {
         state: TaskState.running,
         received: _update.received + chunk.length,
       );
-      _speedSampler.add(chunk.length);
+      if (!_speedSampler.isClosed) {
+        _speedSampler.add(chunk.length);
+      }
     }
   }
 
@@ -654,7 +666,9 @@ class _DownloadTask extends DownloadTask {
     }
     _update = _update.copyWith(state: TaskState.stopped);
     _notify();
-    _eventStreamController.addError(e);
+    _eventStreamController.addError(
+      e is DownloadException ? e : DownloadException.wrap(e),
+    );
     _eventStreamController.close();
   }
 
