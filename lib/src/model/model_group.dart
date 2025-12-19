@@ -47,4 +47,20 @@ class ModelGroup {
       tags: List<int>.from(map['tags'] ?? []),
     );
   }
+
+  ModelGroup copyWith({
+    String? name,
+    String? desc,
+    List<ModelBackend>? backends,
+    List<ModelPlatform>? platforms,
+    List<int>? tags,
+  }) {
+    return ModelGroup(
+      name: name ?? this.name,
+      desc: desc ?? this.desc,
+      backends: backends ?? this.backends,
+      platforms: platforms ?? this.platforms,
+      tags: tags ?? this.tags,
+    );
+  }
 }

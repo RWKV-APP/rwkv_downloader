@@ -14,9 +14,12 @@ class ModelInfo {
   final List<String> tags;
   final List<String> groups;
   final List<String> socLimitations;
+  final List<String> decodeParams;
   final bool isDebug;
   final int updatedAt;
   final String description;
+  final String vocabUrl;
+  final String vocabId;
 
   final String localPath;
 
@@ -28,6 +31,9 @@ class ModelInfo {
     required this.name,
     required this.modelSize,
     required this.url,
+    required this.vocabUrl,
+    required this.vocabId,
+    required this.decodeParams,
     required this.sha256,
     required this.md5,
     required this.fileSize,
@@ -49,6 +55,9 @@ class ModelInfo {
       'name': name,
       'modelSize': modelSize,
       'url': url,
+      'vocabUrl': vocabUrl,
+      'vocabId': vocabId,
+      'decodeParams': decodeParams,
       'md5': md5,
       'sha256': sha256,
       'fileSize': fileSize,
@@ -82,6 +91,8 @@ class ModelInfo {
       id: map['id'] as String,
       name: map['name'] as String,
       url: map['url'] as String,
+      vocabUrl: map['vocabUrl'] ?? '',
+      vocabId: map['vocabId'] ?? '',
       modelSize: map['modelSize'] ?? -1,
       fileSize: map['fileSize'] ?? -1,
       quantization: map['quantization'] ?? '',
@@ -90,6 +101,7 @@ class ModelInfo {
       tags: List<String>.from(map['tags'] ?? []),
       groups: List<String>.from(map['groups'] ?? []),
       socLimitations: List<String>.from(map['socLimitations'] ?? []),
+      decodeParams: List<String>.from(map['decodeParams'] ?? []),
       isDebug: map['isDebug'] ?? false,
       sha256: map['sha256'] ?? '',
       md5: map['md5'] ?? '',
@@ -103,6 +115,9 @@ class ModelInfo {
     String? name,
     num? modelSize,
     String? url,
+    String? vocabUrl,
+    String? vocabId,
+    List<String>? decodeParams,
     num? fileSize,
     String? md5,
     String? sha256,
@@ -122,6 +137,9 @@ class ModelInfo {
       name: name ?? this.name,
       modelSize: modelSize ?? this.modelSize,
       url: url ?? this.url,
+      vocabUrl: vocabUrl ?? this.vocabUrl,
+      vocabId: vocabId ?? this.vocabId,
+      decodeParams: decodeParams ?? this.decodeParams,
       fileSize: fileSize ?? this.fileSize,
       md5: md5 ?? this.md5,
       sha256: sha256 ?? this.sha256,

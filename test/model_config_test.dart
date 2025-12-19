@@ -11,8 +11,11 @@ void main() {
     final config = ModelConfig(
       version: 1,
       timestamp: 0,
+      vocabList: [],
+      decodeParams: [],
       models: [
         ModelInfo(
+          decodeParams: [],
           id: 'id',
           name: 'name',
           modelSize: 1,
@@ -29,6 +32,8 @@ void main() {
           isDebug: false,
           description: '',
           updatedAt: 0,
+          vocabId: '',
+          vocabUrl: '',
         ),
       ],
       tags: [ModelTag(name: 'tag1', desc: 'desc', color: 'color')],
