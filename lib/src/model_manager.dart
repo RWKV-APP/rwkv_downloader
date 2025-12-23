@@ -8,19 +8,19 @@ import 'package:rwkv_downloader/src/exception.dart';
 import 'package:rwkv_downloader/src/logger.dart';
 import 'package:rxdart/rxdart.dart';
 
-typedef ModelFilter = bool Function(ModelInfo config);
+typedef ModelFilter = bool Function(ModelConfig config, ModelInfo model);
 
 typedef ModelId = String;
 
-bool _defaultModelFilter(ModelInfo config) {
-  if (config.isDebug) {
+bool _defaultModelFilter(ModelConfig config, ModelInfo model) {
+  if (model.isDebug) {
     return false;
   }
   final conditions = {
-    config.platforms.contains(ModelPlatform.current),
-    config.backend != ModelBackend.qnn || !Platform.isAndroid,
-    config.backend != ModelBackend.mlx || !Platform.isIOS,
-    config.backend != ModelBackend.albatross ||
+    model.backend.platforms.contains(ModelPlatform.current),
+    model.backend != ModelBackend.qnn || !Platform.isAndroid,
+    model.backend != ModelBackend.mlx || !Platform.isIOS,
+    model.backend != ModelBackend.albatross ||
         !Platform.isWindows ||
         !Platform.isLinux,
   };
@@ -105,8 +105,8 @@ class ModelManager {
       Logger.debug(tag, 'pull remote config failed: $e');
       try {
         await _restoreCache();
-      } catch (e) {
-        Logger.debug(tag, 'restore cache failed: $e');
+      } catch (e, st) {
+        Logger.debug(tag, 'restore cache failed: $e\n$st');
       }
     }
     await _restoreDownloadTasks();
@@ -265,10 +265,10 @@ class ModelManager {
   void _resolveConfig() {
     _filename2models = {};
     for (final model in _config.models) {
-      if (_modelFilter != null && !_modelFilter!(model)) {
+      if (_modelFilter != null && !_modelFilter!(_config, model)) {
         continue;
       }
-      if (_excludeModelFilter != null && _excludeModelFilter!(model)) {
+      if (_excludeModelFilter != null && _excludeModelFilter!(_config, model)) {
         continue;
       }
       final file = _localCacheFiles[model.fileName];
@@ -349,8 +349,8 @@ class ModelManager {
         }
       }
       Logger.info(tag, '${_downloadTasks.length} download tasks restored');
-    } catch (e) {
-      Logger.error(tag, 'restore download tasks failed: $e');
+    } catch (e, st) {
+      Logger.error(tag, 'restore download tasks failed: $e\n$st');
     }
   }
 

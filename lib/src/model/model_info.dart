@@ -9,11 +9,9 @@ class ModelInfo {
   final String md5;
   final String sha256;
   final String quantization;
-  final List<ModelPlatform> platforms;
   final ModelBackend backend;
   final List<String> tags;
   final List<String> groups;
-  final List<String> socLimitations;
   final List<String> decodeParams;
   final bool isDebug;
   final int updatedAt;
@@ -38,14 +36,33 @@ class ModelInfo {
     required this.md5,
     required this.fileSize,
     required this.quantization,
-    required this.platforms,
     required this.backend,
     required this.tags,
     required this.groups,
-    required this.socLimitations,
     required this.isDebug,
     required this.updatedAt,
     required this.description,
+    this.localPath = '',
+  });
+
+  ModelInfo.base({
+    required this.id,
+    required this.name,
+    required this.url,
+    this.modelSize = -1,
+    this.vocabUrl = '',
+    this.vocabId = '',
+    this.decodeParams = const [],
+    this.sha256 = '',
+    this.md5 = '',
+    this.fileSize = -1,
+    this.quantization = '',
+    this.backend = ModelBackend.unknown,
+    this.tags = const [],
+    this.groups = const [],
+    this.isDebug = false,
+    this.updatedAt = -1,
+    this.description = '',
     this.localPath = '',
   });
 
@@ -62,11 +79,9 @@ class ModelInfo {
       'sha256': sha256,
       'fileSize': fileSize,
       'quantization': quantization,
-      'platforms': platforms.map((e) => e.name).toList(),
       'backend': backend.name,
       'tags': tags,
       'groups': groups,
-      'socLimitations': socLimitations,
       'isDebug': isDebug,
       'updatedAt': updatedAt,
       'description': description,
@@ -96,11 +111,9 @@ class ModelInfo {
       modelSize: map['modelSize'] ?? -1,
       fileSize: map['fileSize'] ?? -1,
       quantization: map['quantization'] ?? '',
-      platforms: ModelPlatform.fromJson(map['platforms']),
       backend: ModelBackend.fromString(map['backend']),
       tags: List<String>.from(map['tags'] ?? []),
       groups: List<String>.from(map['groups'] ?? []),
-      socLimitations: List<String>.from(map['socLimitations'] ?? []),
       decodeParams: List<String>.from(map['decodeParams'] ?? []),
       isDebug: map['isDebug'] ?? false,
       sha256: map['sha256'] ?? '',
@@ -122,11 +135,9 @@ class ModelInfo {
     String? md5,
     String? sha256,
     String? quantization,
-    List<ModelPlatform>? platforms,
     ModelBackend? backend,
     List<String>? tags,
     List<String>? groups,
-    List<String>? socLimitations,
     bool? isDebug,
     String? localPath,
     int? updatedAt,
@@ -144,11 +155,9 @@ class ModelInfo {
       md5: md5 ?? this.md5,
       sha256: sha256 ?? this.sha256,
       quantization: quantization ?? this.quantization,
-      platforms: platforms ?? this.platforms,
       backend: backend ?? this.backend,
       tags: tags ?? this.tags,
       groups: groups ?? this.groups,
-      socLimitations: socLimitations ?? this.socLimitations,
       isDebug: isDebug ?? this.isDebug,
       localPath: localPath ?? this.localPath,
       updatedAt: updatedAt ?? this.updatedAt,

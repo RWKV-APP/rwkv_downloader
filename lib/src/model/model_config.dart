@@ -14,6 +14,24 @@ class ModelConfig {
   final List<VocabInfo> vocabList;
   final List<DecodeParamConfig> decodeParams;
 
+  late final Map<String, ModelTag> _name2tag = {
+    for (final tag in tags) tag.name: tag,
+  };
+
+  late final Map<String, ModelGroup> _name2group = {
+    for (final group in groups) group.name: group,
+  };
+
+  late final Map<String, ModelInfo> _id2model = {
+    for (final model in models) model.id: model,
+  };
+
+  ModelTag? getTag(String name) => _name2tag[name];
+
+  ModelGroup? getGroup(String name) => _name2group[name];
+
+  ModelInfo? getModel(String id) => _id2model[id];
+
   ModelConfig({
     required this.version,
     required this.timestamp,
@@ -52,25 +70,19 @@ class ModelConfig {
     return ModelConfig(
       version: map['version'] as int,
       timestamp: map['timestamp'] as int,
-      models: (map['models'] as Iterable)
+      models: (map['models'] as Iterable? ?? [])
           .map((e) => ModelInfo.fromMap(e))
           .toList(),
-      tags:
-          (map['tags'] as Iterable?)
-              ?.map((e) => ModelTag.fromMap(e))
-              .toList() ??
-          [],
-      groups:
-          (map['groups'] as Iterable?)
-              ?.map((e) => ModelGroup.fromMap(e))
-              .toList() ??
-          [],
-      vocabList:
-          (map['vocabList'] as Iterable?)
-              ?.map((e) => VocabInfo.fromMap(e))
-              .toList() ??
-          [],
-      decodeParams: (map['decodeParams'] as Iterable)
+      tags: (map['tags'] as Iterable? ?? [])
+          .map((e) => ModelTag.fromMap(e))
+          .toList(),
+      groups: (map['groups'] as Iterable? ?? [])
+          .map((e) => ModelGroup.fromMap(e))
+          .toList(),
+      vocabList: (map['vocabList'] as Iterable? ?? [])
+          .map((e) => VocabInfo.fromMap(e))
+          .toList(),
+      decodeParams: (map['decodeParams'] as Iterable? ?? [])
           .map((e) => DecodeParamConfig.fromMap(e))
           .toList(),
     );

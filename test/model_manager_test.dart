@@ -19,7 +19,7 @@ void main() {
   test('test_get_model_list', () async {
     await instance.init();
     for (final model in instance.models) {
-      print("${model.fileName}, ${model.platforms}");
+      print("${model.fileName}");
     }
   });
 

@@ -39,17 +39,43 @@ enum ModelPlatform {
 }
 
 enum ModelBackend {
-  mnn,
-  qnn,
-  llama_cpp(aliases: {'llama-cpp', 'llamacpp'}),
-  albatross,
-  mlx,
-  web_rwkv(aliases: {'webRwkv', 'web-rwkv'}),
-  unknown;
+  mnn(
+    platforms: {
+      ModelPlatform.windows,
+      ModelPlatform.android,
+      ModelPlatform.ios,
+      ModelPlatform.macos,
+      ModelPlatform.linux,
+    },
+  ),
+  qnn(platforms: {ModelPlatform.android}),
+  llama_cpp(
+    aliases: {'llama-cpp', 'llamacpp'},
+    platforms: {
+      ModelPlatform.windows,
+      ModelPlatform.android,
+      ModelPlatform.ios,
+      ModelPlatform.macos,
+      ModelPlatform.linux,
+    },
+  ),
+  albatross(platforms: {ModelPlatform.windows, ModelPlatform.linux}),
+  mlx(platforms: {ModelPlatform.ios, ModelPlatform.macos}),
+  web_rwkv(
+    aliases: {'webRwkv', 'web-rwkv'},
+    platforms: {
+      ModelPlatform.web,
+      ModelPlatform.windows,
+      ModelPlatform.macos,
+      ModelPlatform.linux,
+    },
+  ),
+  unknown(platforms: {...ModelPlatform.values});
 
   final Set<String> aliases;
+  final Set<ModelPlatform> platforms;
 
-  const ModelBackend({this.aliases = const {}});
+  const ModelBackend({this.aliases = const {}, this.platforms = const {}});
 
   static ModelBackend fromString(String? backend) {
     if (backend == null) {
@@ -61,6 +87,25 @@ enum ModelBackend {
       }
     }
     return unknown;
+  }
+
+  static ModelBackend? conjecture(String extension) {
+    switch (extension) {
+      case 'rmpack':
+        return qnn;
+      case 'gguf':
+      case 'ggml':
+        return llama_cpp;
+      case 'pth':
+        return albatross;
+      case 'zip':
+        return mlx;
+      case 'prefab':
+      case 'st':
+        return web_rwkv;
+      default:
+        return null;
+    }
   }
 
   static List<ModelBackend> fromJson(Iterable? json) {
