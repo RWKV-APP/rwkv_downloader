@@ -4,9 +4,19 @@ import 'dart:io';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:rwkv_downloader/src/model/model.dart';
 
+Future serve() async {
+  final pwd = Directory.current.path;
+  await Process.run('python', [
+    '-m',
+    'http.server',
+    '8081',
+  ], workingDirectory: '${pwd}\\example');
+}
+
 void main() async {
+
   final src = File('./example/latest.json');
-  final dst = File('./example/latest_parsed.json');
+  final dst = File('./example/model_config.json');
 
   final content = await src.readAsString();
   final json = jsonDecode(content);
@@ -25,6 +35,7 @@ void main() async {
       m['id'] = digest.convert(utf8.encode(m['url'])).toString();
       m['groups'] = [g.key];
       m['backend'] = m['backends']?.first;
+      m['updatedAt'] = (m['date'] ?? 0) * 1000;
       ModelInfo model = ModelInfo.fromMap(m);
       models.add(model);
 
@@ -42,6 +53,8 @@ void main() async {
     models: models,
     tags: tags.values.toList(),
     groups: groups,
+    vocabList: [],
+    decodeParams: [],
   );
 
   final parsed = jsonEncode(config.toMap());
@@ -50,4 +63,7 @@ void main() async {
   }
   await dst.create(recursive: true);
   await dst.writeAsString(parsed);
+
+  await serve();
+  return;
 }

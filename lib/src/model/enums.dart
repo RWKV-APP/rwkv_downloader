@@ -38,8 +38,30 @@ enum ModelPlatform {
   }
 }
 
-enum ModelBackend {
-  mnn(
+class ModelBackend {
+  final Set<String> aliases;
+  final Set<ModelPlatform> platforms;
+  final String name;
+  final Set<String> extensions;
+
+  const ModelBackend({
+    this.aliases = const {},
+    required this.platforms,
+    required this.name,
+    required this.extensions,
+  });
+
+  static final defaultBackends = [
+    mnn,
+    qnn,
+    llama_cpp,
+    albatross,
+    mlx,
+    web_rwkv,
+    mtk_np7
+  ];
+
+  static const mnn = ModelBackend(
     platforms: {
       ModelPlatform.windows,
       ModelPlatform.android,
@@ -47,10 +69,24 @@ enum ModelBackend {
       ModelPlatform.macos,
       ModelPlatform.linux,
     },
-  ),
-  qnn(platforms: {ModelPlatform.android}),
-  llama_cpp(
-    aliases: {'llama-cpp', 'llamacpp'},
+    name: 'mnn',
+    extensions: {'mnn'},
+  );
+
+  static const unknown = ModelBackend(
+    platforms: {...ModelPlatform.values},
+    name: 'unknown',
+    extensions: {},
+  );
+
+  static const qnn = ModelBackend(
+    platforms: {ModelPlatform.android},
+    name: 'qnn',
+    extensions: {'rmpack'},
+  );
+
+  static const llama_cpp = ModelBackend(
+    aliases: {'llama-cpp', 'llamacpp', 'llama_cpp', 'llama.cpp'},
     platforms: {
       ModelPlatform.windows,
       ModelPlatform.android,
@@ -58,10 +94,23 @@ enum ModelBackend {
       ModelPlatform.macos,
       ModelPlatform.linux,
     },
-  ),
-  albatross(platforms: {ModelPlatform.windows, ModelPlatform.linux}),
-  mlx(platforms: {ModelPlatform.ios, ModelPlatform.macos}),
-  web_rwkv(
+    name: 'llama_cpp',
+    extensions: {'gguf', 'ggml'},
+  );
+
+  static const albatross = ModelBackend(
+    platforms: {ModelPlatform.windows, ModelPlatform.linux},
+    name: 'albatross',
+    extensions: {'pth'},
+  );
+
+  static const mlx = ModelBackend(
+    platforms: {ModelPlatform.ios, ModelPlatform.macos},
+    name: 'mlx',
+    extensions: {'zip'},
+  );
+
+  static const web_rwkv = ModelBackend(
     aliases: {'webRwkv', 'web-rwkv'},
     platforms: {
       ModelPlatform.web,
@@ -69,49 +118,56 @@ enum ModelBackend {
       ModelPlatform.macos,
       ModelPlatform.linux,
     },
-  ),
-  unknown(platforms: {...ModelPlatform.values});
+    name: 'web_rwkv',
+    extensions: {'prefab', 'st'},
+  );
 
-  final Set<String> aliases;
-  final Set<ModelPlatform> platforms;
+  static const mtk_np7 = ModelBackend(
+    aliases: {'mtk-np7', 'mtk_np7'},
+    platforms: {ModelPlatform.android},
+    name: 'mtk_np7',
+    extensions: {'np7'},
+  );
 
-  const ModelBackend({this.aliases = const {}, this.platforms = const {}});
-
-  static ModelBackend fromString(String? backend) {
+  factory ModelBackend.fromString(String? backend) {
     if (backend == null) {
       return unknown;
     }
-    for (final value in ModelBackend.values) {
+    for (final value in ModelBackend.defaultBackends) {
       if (value.name == backend || value.aliases.contains(backend)) {
         return value;
       }
     }
-    return unknown;
-  }
-
-  static ModelBackend? conjecture(String extension) {
-    switch (extension) {
-      case 'rmpack':
-        return qnn;
-      case 'gguf':
-      case 'ggml':
-        return llama_cpp;
-      case 'pth':
-        return albatross;
-      case 'zip':
-        return mlx;
-      case 'prefab':
-      case 'st':
-        return web_rwkv;
-      default:
-        return null;
-    }
+    return ModelBackend(
+      platforms: {...ModelPlatform.values},
+      name: backend,
+      extensions: {},
+    );
   }
 
   static List<ModelBackend> fromJson(Iterable? json) {
     if (json == null) {
       return [];
     }
-    return json.map((e) => fromString(e)).toList();
+    return json.map((e) => ModelBackend.fromString(e)).toList();
   }
+
+  static ModelBackend? conjecture(String extension) {
+    for (final value in ModelBackend.defaultBackends) {
+      if (value.extensions.contains(extension)) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ModelBackend &&
+          runtimeType == other.runtimeType &&
+          name == other.name;
+
+  @override
+  int get hashCode => name.hashCode;
 }
