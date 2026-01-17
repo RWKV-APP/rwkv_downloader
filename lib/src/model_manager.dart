@@ -79,6 +79,8 @@ class ModelManager {
   /// Return available models
   List<ModelInfo> get models => _filename2models.values.toList();
 
+  ModelConfig get modelConfig => _config;
+
   ModelManager({
     required DownloadSource downloadSource,
     required String modelDownloadDir,
@@ -180,20 +182,25 @@ class ModelManager {
 
     _downloadTasks[id] = task;
 
-    final sp = task.events().listen(
-      (event) {
-        _downloadEvent.add(DownloadEvent(model: model, update: event));
-      },
-      onDone: () {
-        _updateLocalModelFiles();
-      },
-      onError: (e) {
-        _downloadEvent.add(
-          DownloadEvent(model: model, update: task.update, error: e),
+    final sp = task
+        .events() //
+        .listen(
+          (event) async {
+            if (event.isCompleted) {
+              await _updateLocalModelFiles();
+            }
+            _downloadEvent.add(DownloadEvent(model: model, update: event));
+          },
+          onDone: () {
+            //
+          },
+          onError: (e) {
+            _downloadEvent.add(
+              DownloadEvent(model: model, update: task.update, error: e),
+            );
+            _updateLocalModelFiles();
+          },
         );
-        _updateLocalModelFiles();
-      },
-    );
     try {
       await task.start();
     } catch (_) {

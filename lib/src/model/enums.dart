@@ -58,7 +58,8 @@ class ModelBackend {
     albatross,
     mlx,
     web_rwkv,
-    mtk_np7
+    mtk_np7,
+    albatross
   ];
 
   static const mnn = ModelBackend(
