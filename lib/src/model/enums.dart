@@ -42,6 +42,7 @@ class ModelBackend {
   final Set<String> aliases;
   final Set<ModelPlatform> platforms;
   final String name;
+  final String displayName;
   final Set<String> extensions;
 
   const ModelBackend({
@@ -49,7 +50,8 @@ class ModelBackend {
     required this.platforms,
     required this.name,
     required this.extensions,
-  });
+    String? displayName,
+  }) : displayName = displayName ?? name;
 
   static final defaultBackends = [
     mnn,
@@ -59,7 +61,6 @@ class ModelBackend {
     mlx,
     web_rwkv,
     mtk_np7,
-    albatross
   ];
 
   static const mnn = ModelBackend(
@@ -72,18 +73,21 @@ class ModelBackend {
     },
     name: 'mnn',
     extensions: {'mnn'},
+    displayName: 'MNN',
   );
 
   static const unknown = ModelBackend(
     platforms: {...ModelPlatform.values},
     name: 'unknown',
     extensions: {},
+    displayName: 'Unknown',
   );
 
   static const qnn = ModelBackend(
     platforms: {ModelPlatform.android},
     name: 'qnn',
     extensions: {'rmpack'},
+    displayName: 'QNN',
   );
 
   static const llama_cpp = ModelBackend(
@@ -97,18 +101,21 @@ class ModelBackend {
     },
     name: 'llama_cpp',
     extensions: {'gguf', 'ggml'},
+    displayName: 'llama.cpp',
   );
 
   static const albatross = ModelBackend(
     platforms: {ModelPlatform.windows, ModelPlatform.linux},
     name: 'albatross',
     extensions: {'pth'},
+    displayName: 'Albatross',
   );
 
   static const mlx = ModelBackend(
     platforms: {ModelPlatform.ios, ModelPlatform.macos},
     name: 'mlx',
     extensions: {'zip'},
+    displayName: 'MLX',
   );
 
   static const web_rwkv = ModelBackend(
@@ -121,6 +128,7 @@ class ModelBackend {
     },
     name: 'web_rwkv',
     extensions: {'prefab', 'st'},
+    displayName: 'WebRWKV',
   );
 
   static const mtk_np7 = ModelBackend(
@@ -128,6 +136,7 @@ class ModelBackend {
     platforms: {ModelPlatform.android},
     name: 'mtk_np7',
     extensions: {'np7'},
+    displayName: 'MTK NP7',
   );
 
   factory ModelBackend.fromString(String? backend) {
@@ -143,6 +152,7 @@ class ModelBackend {
       platforms: {...ModelPlatform.values},
       name: backend,
       extensions: {},
+      displayName: backend,
     );
   }
 
