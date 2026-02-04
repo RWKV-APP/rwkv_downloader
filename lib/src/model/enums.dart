@@ -61,6 +61,7 @@ class ModelBackend {
     mlx,
     web_rwkv,
     mtk_np7,
+    pytorch,
   ];
 
   static const mnn = ModelBackend(
@@ -105,10 +106,17 @@ class ModelBackend {
   );
 
   static const albatross = ModelBackend(
-    platforms: {ModelPlatform.windows, ModelPlatform.linux},
+    platforms: {ModelPlatform.windows, ModelPlatform.linux, ModelPlatform.macos},
     name: 'albatross',
     extensions: {'pth'},
     displayName: 'Albatross',
+  );
+
+  static const pytorch = ModelBackend(
+    platforms: {ModelPlatform.windows, ModelPlatform.linux, ModelPlatform.macos},
+    name: 'pytorch',
+    extensions: {'pth'},
+    displayName: 'PyTorch',
   );
 
   static const mlx = ModelBackend(

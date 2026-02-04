@@ -202,7 +202,13 @@ class ModelManager {
       [_modelDownloadDir.path, model.fileName].join(Platform.pathSeparator),
     );
     if (await file.exists()) {
-      throw DownloadException(message: 'file already downloaded');
+      _downloadEvent.add(DownloadEvent(model: model,
+          update: TaskUpdate(speed: 0,
+              state: TaskState.completed,
+              received: 0,
+              totalSize: 0,
+              timestamp: 0)));
+      return;
     }
     final task = await downloadSource.createDownloadTask(model.url, file.path);
 
