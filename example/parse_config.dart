@@ -37,6 +37,10 @@ void main() async {
       m['backend'] = m['backends']?.first;
       m['updatedAt'] = (m['date'] ?? 0) * 1000;
       ModelInfo model = ModelInfo.fromMap(m);
+      if (model.groups.contains('albatross')) {
+        model = model.copyWith(backend: ModelBackend.albatross);
+      }
+
       models.add(model);
 
       for (final tag in m['tags'] ?? []) {

@@ -60,7 +60,7 @@ class ModelManager {
   // file-name to file
   Map<String, File> _localCacheFiles = {};
 
-  late final String? _remoteConfigUrl;
+  late String _remoteConfigUrl;
   late String _configFileCachePath;
   late Directory _modelDownloadDir;
 
@@ -81,6 +81,10 @@ class ModelManager {
 
   ModelConfig get modelConfig => _config;
 
+  void setConfigProviderUrl(String url) {
+    _remoteConfigUrl = url;
+  }
+
   ModelManager({
     required DownloadSource downloadSource,
     required String modelDownloadDir,
@@ -92,7 +96,7 @@ class ModelManager {
   })
       : this._downloadFileVerifier = downloadFileVerifier,
         this.downloadSource = downloadSource,
-        this._remoteConfigUrl = configProviderUrl,
+        this._remoteConfigUrl = configProviderUrl ?? '',
         this._configFileCachePath =
             configFileCachePath ?? '${modelDownloadDir}/model_config.json',
         this._modelDownloadDir = Directory(modelDownloadDir),
