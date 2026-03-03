@@ -81,6 +81,8 @@ class ModelManager {
 
   ModelConfig get modelConfig => _config;
 
+  Map<ModelId, DownloadTask> get downloadTasks => {..._downloadTasks};
+
   void setConfigProviderUrl(String url) {
     _remoteConfigUrl = url;
   }
