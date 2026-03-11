@@ -95,15 +95,14 @@ class ModelManager {
     FileVerifier downloadFileVerifier = DownloadTask.defaultFileVerifier,
     ModelFilter? filter = defaultModelFilter,
     ModelFilter? exclude,
-  })
-      : this._downloadFileVerifier = downloadFileVerifier,
-        this.downloadSource = downloadSource,
-        this._remoteConfigUrl = configProviderUrl ?? '',
-        this._configFileCachePath =
-            configFileCachePath ?? '${modelDownloadDir}/model_config.json',
-        this._modelDownloadDir = Directory(modelDownloadDir),
-        this._modelFilter = filter,
-        this._excludeModelFilter = exclude;
+  }) : this._downloadFileVerifier = downloadFileVerifier,
+       this.downloadSource = downloadSource,
+       this._remoteConfigUrl = configProviderUrl ?? '',
+       this._configFileCachePath =
+           configFileCachePath ?? '${modelDownloadDir}/model_config.json',
+       this._modelDownloadDir = Directory(modelDownloadDir),
+       this._modelFilter = filter,
+       this._excludeModelFilter = exclude;
 
   Future setModelDownloadDir(String dir, {bool migration = false}) async {
     if (dir == _modelDownloadDir.path) {
@@ -114,6 +113,8 @@ class ModelManager {
     }
     final old = _modelDownloadDir;
     _modelDownloadDir = Directory(dir);
+    _downloadTasks.clear();
+
     if (!migration || !await old.exists()) {
       return;
     }
@@ -150,7 +151,8 @@ class ModelManager {
 
   /// Try to pull config-file from remote, update local cache, and model list.
   Future updateConfig() async {
-    if (_remoteConfigUrl == null || _remoteConfigUrl.isEmpty) {
+    await _updateLocalModelFiles();
+    if (_remoteConfigUrl.isEmpty) {
       throw Exception('configUrl is not set');
     }
     // todo version check
@@ -208,12 +210,18 @@ class ModelManager {
       [_modelDownloadDir.path, model.fileName].join(Platform.pathSeparator),
     );
     if (await file.exists()) {
-      _downloadEvent.add(DownloadEvent(model: model,
-          update: TaskUpdate(speed: 0,
-              state: TaskState.completed,
-              received: 0,
-              totalSize: 0,
-              timestamp: 0)));
+      _downloadEvent.add(
+        DownloadEvent(
+          model: model,
+          update: TaskUpdate(
+            speed: 0,
+            state: TaskState.completed,
+            received: 0,
+            totalSize: 0,
+            timestamp: 0,
+          ),
+        ),
+      );
       return;
     }
     final task = await downloadSource.createDownloadTask(model.url, file.path);
@@ -228,21 +236,21 @@ class ModelManager {
         .events() //
         .listen(
           (event) async {
-        if (event.isCompleted) {
-          await _updateLocalModelFiles();
-        }
-        _downloadEvent.add(DownloadEvent(model: model, update: event));
-      },
-      onDone: () {
-        //
-      },
-      onError: (e) {
-        _downloadEvent.add(
-          DownloadEvent(model: model, update: task.update, error: e),
+            if (event.isCompleted) {
+              await _updateLocalModelFiles();
+            }
+            _downloadEvent.add(DownloadEvent(model: model, update: event));
+          },
+          onDone: () {
+            //
+          },
+          onError: (e) {
+            _downloadEvent.add(
+              DownloadEvent(model: model, update: task.update, error: e),
+            );
+            _updateLocalModelFiles();
+          },
         );
-        _updateLocalModelFiles();
-      },
-    );
     try {
       await task.start();
     } catch (_) {
@@ -278,9 +286,7 @@ class ModelManager {
       if (file is! File) {
         continue;
       }
-      final name = file.path
-          .split(Platform.pathSeparator)
-          .last;
+      final name = file.path.split(Platform.pathSeparator).last;
       if (cleanDownloadCache && file.path.endsWith('.tmp')) {
         await file.delete();
         Logger.info(tag, 'delete download cache file: ${file.path}');
@@ -334,12 +340,11 @@ class ModelManager {
     Logger.debug(
       tag,
       'config resolved: '
-          'version: ${_config.version}, '
-          'timestamp: ${_config.timestamp}, '
-          '${_filename2models.length}/${_config.models
-          .length} available models, '
-          '${_config.tags.length} tags, '
-          '${_config.groups.length} groups',
+      'version: ${_config.version}, '
+      'timestamp: ${_config.timestamp}, '
+      '${_filename2models.length}/${_config.models.length} available models, '
+      '${_config.tags.length} tags, '
+      '${_config.groups.length} groups',
     );
   }
 
@@ -352,19 +357,16 @@ class ModelManager {
       await for (final file in _modelDownloadDir.list()) {
         if (file is! File) continue;
 
-        final fileName = file.path
-            .split(Platform.pathSeparator)
-            .last;
-        final suffix = fileName
-            .split('.')
-            .last;
+        final fileName = file.path.split(Platform.pathSeparator).last;
+        final suffix = fileName.split('.').last;
 
         if ({'json', 'txt', 'tmp', 'log'}.contains(suffix)) {
           continue;
         }
         _localCacheFiles[fileName] = File(file.path);
         final info = _filename2models[fileName];
-        if (info != null) {
+        if (info != null && info.localPath != file.path) {
+          Logger.info(tag, 'local model file: ${info.name}, ${file.path}');
           _filename2models[fileName] = info.copyWith(localPath: file.path);
         }
       }
@@ -386,9 +388,7 @@ class ModelManager {
       await for (final file in _modelDownloadDir.list()) {
         if (file is! File) continue;
 
-        final fileName = file.path
-            .split(Platform.pathSeparator)
-            .last;
+        final fileName = file.path.split(Platform.pathSeparator).last;
 
         if (!fileName.endsWith('.tmp')) {
           continue;
@@ -422,13 +422,12 @@ class ModelManager {
         if (files.isNotEmpty) {
           Logger.error(
             tag,
-            'IMPORTANT NOTE: [modelDownloadDir] absolute path is ${_modelDownloadDir
-                .absolute.path}',
+            'IMPORTANT NOTE: [modelDownloadDir] absolute path is ${_modelDownloadDir.absolute.path}',
           );
           Logger.error(
             tag,
             'IMPORTANT NOTE: [modelDownloadDir] is not an empty directory before ModelManager is used.'
-                ' Please select an empty directory to ensure file safety.',
+            ' Please select an empty directory to ensure file safety.',
           );
         }
       } else {
