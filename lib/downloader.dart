@@ -83,14 +83,18 @@ class TaskUpdate {
 class DownloadConfig {
   static Dio _dio = Dio();
 
-  static void setProxy(String proxy) {
+  static void init({String? proxy, bool allowAllSsl = false}) {
     _dio = Dio();
     final adapter = (_dio.httpClientAdapter as IOHttpClientAdapter);
     adapter
       ..createHttpClient = () {
         final client = HttpClient();
+        if (allowAllSsl) {
+          client.badCertificateCallback =
+              (X509Certificate cert, String host, int port) => true;
+        }
         client.findProxy = (uri) {
-          if (proxy.isNotEmpty) {
+          if (proxy != null && proxy.isNotEmpty) {
             return 'PROXY $proxy;DIRECT';
           }
           return 'DIRECT';
