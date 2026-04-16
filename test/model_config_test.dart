@@ -32,6 +32,7 @@ void main() {
           updatedAt: 0,
           vocabId: '',
           vocabUrl: '',
+          contextLength: -1
         ),
       ],
       tags: [ModelTag(name: 'tag1', desc: 'desc', color: 'color')],

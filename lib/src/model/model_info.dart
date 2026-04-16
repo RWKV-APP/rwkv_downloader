@@ -16,6 +16,7 @@ class ModelInfo {
   final bool isDebug;
   final int updatedAt;
   final String description;
+  final int contextLength;
   final String vocabUrl;
   final String vocabId;
 
@@ -42,6 +43,7 @@ class ModelInfo {
     required this.isDebug,
     required this.updatedAt,
     required this.description,
+    this.contextLength = -1,
     this.localPath = '',
   });
 
@@ -64,6 +66,7 @@ class ModelInfo {
     this.updatedAt = -1,
     this.description = '',
     this.localPath = '',
+    this.contextLength = -1,
   });
 
   Map<String, dynamic> toMap() {
@@ -85,6 +88,7 @@ class ModelInfo {
       'isDebug': isDebug,
       'updatedAt': updatedAt,
       'description': description,
+      'contextLength': contextLength,
     };
   }
 
@@ -120,6 +124,7 @@ class ModelInfo {
       md5: map['md5'] ?? '',
       updatedAt: map['updatedAt'] ?? 0,
       description: map['description'] ?? '',
+      contextLength: map['contextLength'] ?? -1,
     );
   }
 
@@ -142,6 +147,7 @@ class ModelInfo {
     String? localPath,
     int? updatedAt,
     String? description,
+    int? contextLength,
   }) {
     return ModelInfo(
       id: id ?? this.id,
@@ -162,6 +168,7 @@ class ModelInfo {
       localPath: localPath ?? this.localPath,
       updatedAt: updatedAt ?? this.updatedAt,
       description: description ?? this.description,
+      contextLength: contextLength ?? this.contextLength,
     );
   }
 }

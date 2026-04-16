@@ -116,23 +116,44 @@ class TaskUpdate {
   }
 }
 
-class DownloadConfig {
-  static Dio _dio = Dio();
+class _DownloadManager {
+  static Dio? _dio;
 
-  static void setProxy(String proxy) {
+  static void _init() {
     _dio = Dio();
-    final adapter = (_dio.httpClientAdapter as IOHttpClientAdapter);
+    final adapter = (_dio!.httpClientAdapter as IOHttpClientAdapter);
     adapter
       ..createHttpClient = () {
         final client = HttpClient();
+        client.badCertificateCallback =
+            (X509Certificate cert, String host, int port) {
+              Logger.error(
+                "DownloadConfig",
+                "bad certificate for $host:$port, but still allow",
+              );
+              return true;
+            };
         client.findProxy = (uri) {
-          if (proxy.isNotEmpty) {
-            return 'PROXY $proxy;DIRECT';
-          }
-          return 'DIRECT';
+          final result = HttpClient.findProxyFromEnvironment(uri);
+          Logger.info(
+            "DownloadConfig",
+            "find proxy for ${uri.toString()}: $result",
+          );
+          return result.isEmpty ? 'DIRECT' : result;
         };
         return client;
       };
+  }
+
+  static Future<Response> _download(
+    String url, {
+    Options? options,
+    CancelToken? cancelToken,
+  }) {
+    if (_dio == null) {
+      _init();
+    }
+    return _dio!.get(url, options: options, cancelToken: cancelToken);
   }
 }
 
@@ -372,7 +393,7 @@ class _DownloadTask extends DownloadTask {
     _cancelToken?.cancel();
     _cancelToken = CancelToken();
 
-    final response = await DownloadConfig._dio.get(
+    final response = await _DownloadManager._download(
       url,
       cancelToken: _cancelToken,
       options: Options(

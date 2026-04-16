@@ -40,6 +40,15 @@ void main() async {
       if (model.groups.contains('albatross')) {
         model = model.copyWith(backend: ModelBackend.albatross);
       }
+      if (model.name.toLowerCase().contains("coreml") ||
+          model.name.contains("Translat") ||
+          model.name.contains("mlx") ||
+          (!model.groups.contains("chat") &&
+              !model.groups.contains("roleplay"))) {
+        continue;
+      }
+
+      model = model.copyWith(contextLength: extractCtxLen(model.url));
 
       models.add(model);
 
@@ -50,6 +59,9 @@ void main() async {
       }
     }
   }
+
+  groups.removeWhere((e) => !models.any((m) => m.groups.contains(e.name)));
+  tags.removeWhere((e, v) => !models.any((m) => m.tags.contains(e)));
 
   final config = ModelConfig(
     version: 1,
@@ -68,6 +80,14 @@ void main() async {
   await dst.create(recursive: true);
   await dst.writeAsString(parsed);
 
+  print("serving....");
   await serve();
   return;
+}
+
+int extractCtxLen(String text) {
+  final reg = RegExp(r'ctx(\d+)\D');
+  final match = reg.firstMatch(text);
+  if (match == null) return -1;
+  return int.parse(match.group(1)!);
 }
