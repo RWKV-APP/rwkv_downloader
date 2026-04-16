@@ -116,10 +116,10 @@ class TaskUpdate {
   }
 }
 
-class _DownloadManager {
+class DownloadManager {
   static Dio? _dio;
 
-  static void _init() {
+  static void init({String? proxy}) {
     _dio = Dio();
     final adapter = (_dio!.httpClientAdapter as IOHttpClientAdapter);
     adapter
@@ -134,7 +134,7 @@ class _DownloadManager {
               return true;
             };
         client.findProxy = (uri) {
-          final result = HttpClient.findProxyFromEnvironment(uri);
+          final result = proxy ?? HttpClient.findProxyFromEnvironment(uri);
           Logger.info(
             "DownloadConfig",
             "find proxy for ${uri.toString()}: $result",
@@ -151,7 +151,7 @@ class _DownloadManager {
     CancelToken? cancelToken,
   }) {
     if (_dio == null) {
-      _init();
+      init();
     }
     return _dio!.get(url, options: options, cancelToken: cancelToken);
   }
@@ -393,7 +393,7 @@ class _DownloadTask extends DownloadTask {
     _cancelToken?.cancel();
     _cancelToken = CancelToken();
 
-    final response = await _DownloadManager._download(
+    final response = await DownloadManager._download(
       url,
       cancelToken: _cancelToken,
       options: Options(
