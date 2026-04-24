@@ -2,13 +2,12 @@ name: rwkv_downloader
 description: "File Downloader"
 repository: https://github.com/RWKV-APP/rwkv_downloader
 issue_tracker: https://github.com/RWKV-APP/rwkv_downloader/issues
-version: 1.0.0
+version: 1.0.2
 
 environment:
-  sdk: ^3.8.0
+  sdk: ^3.10.0
 
 dependencies:
-  meta: ^1.18.2
   dio: ^5.9.2
   crypto: ^3.0.7
   rxdart: ^0.28.0
